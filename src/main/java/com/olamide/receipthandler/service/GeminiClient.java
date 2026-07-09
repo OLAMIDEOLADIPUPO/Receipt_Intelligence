@@ -1,0 +1,164 @@
+package com.olamide.receipthandler.service;
+
+import com.olamide.receipthandler.dto.GeminiAnalysisResult;
+import com.olamide.receipthandler.dto.GeminiReceiptData;
+import com.olamide.receipthandler.dto.GeminiResponse;
+import com.olamide.receipthandler.exceptions.GeminiParseException;
+import com.olamide.receipthandler.exceptions.GeminiServiceException;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
+import tools.jackson.databind.ObjectMapper;
+
+
+import java.util.Base64;
+import java.util.List;
+import java.util.Map;
+
+@Component
+public class GeminiClient {
+
+    private final ObjectMapper objectMapper;
+    private final RestTemplate restTemplate;
+
+    @Value("${gemini.api.key}")
+    private String apiKey;
+
+    @Value("${gemini.api.url}")
+    private String apiUrl;
+
+
+    public GeminiClient(ObjectMapper objectMapper, RestTemplate restTemplate) {
+        this.objectMapper = objectMapper;
+        this.restTemplate = restTemplate;
+    }
+
+    public GeminiAnalysisResult analyzeReceipt(byte[] fileBytes, String mimeType) {
+        String base64Image = Base64.getEncoder().encodeToString(fileBytes);
+        Map<String, Object> requestBody = buildRequestBody( base64Image, mimeType);
+        ResponseEntity<GeminiResponse>response =callGemini(requestBody);
+        String rawText = extractText(response);
+        String cleanJson = cleanJson(rawText);
+        GeminiReceiptData geminiReceiptData = parseJson(cleanJson);
+        return new GeminiAnalysisResult(geminiReceiptData, rawText);
+
+
+
+    }
+
+    private ResponseEntity<GeminiResponse> callGemini(Map<String,Object> requestBody){
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String,Object>>request = new HttpEntity<>(requestBody, headers);
+        String urlWithKey = UriComponentsBuilder.fromUriString(apiUrl)
+                .queryParam("key", apiKey)
+                .toUriString();
+
+        try{
+            return restTemplate.postForEntity(urlWithKey, request, GeminiResponse.class);
+        }
+        catch(Exception e){
+            throw new GeminiServiceException("Gemini API call failed " + e.getMessage());
+        }
+
+
+    }
+
+    private String extractText(ResponseEntity<GeminiResponse> response){
+        GeminiResponse body = response.getBody();
+        if(body == null){
+            throw new GeminiServiceException("Gemini returned empty response body");
+        }
+        try{
+
+           return response.getBody()
+                   .candidates().getFirst()
+                   .content().parts().getFirst()
+                   .text();
+
+
+        }
+
+        catch(Exception e){
+            throw new GeminiServiceException("Unexpected Gemini response shape" + e.getMessage());
+        }
+    }
+
+    private String cleanJson(String rawText){
+        return rawText.replace("```json", "")
+                .replace("```", "")
+                .trim();
+    }
+
+    private GeminiReceiptData parseJson(String rawText){
+        try{
+            return objectMapper.readValue(rawText, GeminiReceiptData.class);
+        }
+        catch (Exception e){
+            throw new GeminiParseException("Could not parse Gemini response:" + e.getMessage());
+        }
+    }
+
+    private Map<String, Object> buildRequestBody(String base64Image, String mimeType) {
+        Map<String, Object> textPart = Map.of(
+                "text", buildPrompt()
+        );
+
+        Map<String, Object> imagePart = Map.of(
+                "inlineData", Map.of(
+                        "mimeType", mimeType,
+                        "data", base64Image
+                )
+        );
+
+        Map<String, Object> content = Map.of(
+                "parts", List.of(imagePart, textPart)
+        );
+
+        return Map.of(
+                "contents", List.of(content)
+        );
+    }
+    private String buildPrompt() {
+            return """
+        You are a receipt parser. Extract data from this receipt image and return\s
+        ONLY a valid JSON object. Do not include any explanation, commentary, or\s
+        markdown formatting. Do not wrap the JSON in backticks. Return nothing\s
+        except the raw JSON object itself.
+
+        Use exactly these keys:
+        isReceipt: boolean. true if this image or document is a genuine
+                     purchase receipt, invoice, or proof of payment. false if it is
+                     anything else — a random document, a screenshot of something
+                     unrelated, a blank page, a photo of a person, text unrelated to
+                     a transaction, etc.
+                   \s
+                     If isReceipt is false, set all other fields to null and category
+                     to "OTHER".
+
+        merchantName: string. The name of the business on the receipt.\s
+        Use null if it cannot be read.
+
+        totalAmount: number. The final total amount paid, written as a plain\s
+        number with no currency symbol, no commas, and no text.\s
+        Example: 4500.00, not "4,500.00" or "₦4,500".
+
+        receiptDate: string in YYYY-MM-DD format. The date printed on the receipt.\s
+        Use null if no date is visible. Do not guess or invent a date.
+
+        category: string. Choose exactly one value from this list, with no\s
+        variation in spelling or wording:
+        FOOD, TRANSPORT, SHOPPING, UTILITIES, ENTERTAINMENT, OTHER
+
+        Return the JSON object now, with no other text before or after it.
+       \s""";
+        }
+
+    }
+
