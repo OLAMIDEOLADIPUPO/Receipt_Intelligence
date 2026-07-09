@@ -3,6 +3,7 @@ package com.olamide.receipthandler.dto;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 public record ReceiptResponseDTO(
@@ -10,8 +11,7 @@ public record ReceiptResponseDTO(
         String merchantName,
         BigDecimal totalAmount,
         String currency,
-        com.olamide.receipthandler.enums.Category category,
         LocalDate receiptDate,
-        Instant createdAt
-) {
-}
+        Instant createdAt,
+        List<ReceiptItemDTO> items
+) {}

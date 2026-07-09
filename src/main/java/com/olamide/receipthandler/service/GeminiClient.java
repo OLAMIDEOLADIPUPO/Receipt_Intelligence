@@ -126,39 +126,45 @@ public class GeminiClient {
         );
     }
     private String buildPrompt() {
-            return """
-        You are a receipt parser. Extract data from this receipt image and return\s
-        ONLY a valid JSON object. Do not include any explanation, commentary, or\s
-        markdown formatting. Do not wrap the JSON in backticks. Return nothing\s
+        return """
+        You are a receipt parser. Extract data from this receipt image and return
+        ONLY a valid JSON object. Do not include any explanation, commentary, or
+        markdown formatting. Do not wrap the JSON in backticks. Return nothing
         except the raw JSON object itself.
 
         Use exactly these keys:
-        isReceipt: boolean. true if this image or document is a genuine
-                     purchase receipt, invoice, or proof of payment. false if it is
-                     anything else — a random document, a screenshot of something
-                     unrelated, a blank page, a photo of a person, text unrelated to
-                     a transaction, etc.
-                   \s
-                     If isReceipt is false, set all other fields to null and category
-                     to "OTHER".
 
-        merchantName: string. The name of the business on the receipt.\s
+        isReceipt: boolean. true if this image or document is a genuine
+        purchase receipt, invoice, or proof of payment. false if it is
+        anything else — a random document, a screenshot of something
+        unrelated, a blank page, a photo of a person, text unrelated to
+        a transaction, etc.
+        If isReceipt is false, set all other fields to null and items to [].
+
+        merchantName: string. The name of the business on the receipt.
         Use null if it cannot be read.
 
-        totalAmount: number. The final total amount paid, written as a plain\s
-        number with no currency symbol, no commas, and no text.\s
+        totalAmount: number. The final total amount paid, written as a plain
+        number with no currency symbol, no commas, and no text.
         Example: 4500.00, not "4,500.00" or "₦4,500".
 
-        receiptDate: string in YYYY-MM-DD format. The date printed on the receipt.\s
+        receiptDate: string in YYYY-MM-DD format. The date printed on the receipt.
         Use null if no date is visible. Do not guess or invent a date.
 
-        category: string. Choose exactly one value from this list, with no\s
-        variation in spelling or wording:
-        FOOD, TRANSPORT, SHOPPING, UTILITIES, ENTERTAINMENT, OTHER
+        items: array of objects. Each object represents one line item on the receipt.
+        Each object must have exactly these keys:
+          name: string. The item or service name as printed on the receipt.
+          amount: number or null if the individual item price cannot be read.
+          category: string. Choose exactly one from:
+                    FOOD, TRANSPORT, SHOPPING, UTILITIES, ENTERTAINMENT, OTHER
+
+        If you cannot identify individual line items, return a single item object
+        using the merchant name as the name, the totalAmount as the amount,
+        and the most appropriate category.
 
         Return the JSON object now, with no other text before or after it.
-       \s""";
-        }
+        """;
+    }
 
     }
 

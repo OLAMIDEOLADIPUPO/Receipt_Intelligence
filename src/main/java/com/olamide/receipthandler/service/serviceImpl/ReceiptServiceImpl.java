@@ -127,9 +127,9 @@ public class ReceiptServiceImpl implements ReceiptService {
                 receipt.getMerchantName(),
                 receipt.getTotalAmount(),
                 receipt.getCurrency(),
-                receipt.getCategory(),
                 receipt.getDate(),
-                receipt.getCreatedAt()
+                receipt.getCreatedAt(),
+                receipt.getItems()
         );
     }
     private byte[] readBytes(MultipartFile file) {

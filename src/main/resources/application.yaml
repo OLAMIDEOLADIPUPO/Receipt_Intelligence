@@ -37,3 +37,8 @@ gemini:
     key: ${GEMINI_API_KEY}
     url: ${GEMINI_API_URL}
 
+
+jwt:
+  secret: ${JWT_SECRET_KEY}
+  expiration: 86400000
+

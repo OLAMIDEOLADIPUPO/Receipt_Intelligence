@@ -2,17 +2,46 @@ package com.olamide.receipthandler.repository;
 
 import com.olamide.receipthandler.enums.Category;
 import com.olamide.receipthandler.models.Receipt;
+import com.olamide.receipthandler.models.User;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface ReceiptRepository extends JpaRepository<Receipt, UUID> {
     List<Receipt> findByCategoryOrderByCreatedAtDesc(Category category);
-    List<Receipt> findByDateBetween(LocalDate start, LocalDate end);
     List<Receipt> findAllByOrderByCreatedAtDesc();
-    List<Receipt> findByDateIsNull();
+    List<Receipt> findByUserAndDateIsNull();
+    List<Receipt> findByUserOrderByCreatedAtDesc(User user);
+    Optional<Receipt> findByIdAndUser(UUID id, User user);
+
+    @Query("""
+        SELECT r FROM Receipt r
+        JOIN r.items i
+        WHERE r.user = :user
+        AND i.category = :category
+        ORDER BY r.createdAt DESC
+        """)
+    List<Receipt> findByUserAndItemCategory(
+            @Param("user") User user,
+            @Param("category") Category category
+    );
+
+    @Query("""
+        SELECT r FROM Receipt r
+        WHERE r.user = :user
+        AND r.date BETWEEN :start AND :end
+        ORDER BY r.createdAt DESC
+        """)
+    List<Receipt> findByUserAndDateBetween(
+            @Param("user") User user,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end
+    );
 
 
 }

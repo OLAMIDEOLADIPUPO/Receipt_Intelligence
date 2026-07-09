@@ -7,6 +7,8 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -17,6 +19,10 @@ public class Receipt {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
     @Column(nullable = true)
     private String merchantName;
 
@@ -25,9 +31,8 @@ public class Receipt {
     @Column(nullable = true)
     private BigDecimal totalAmount;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private Category category = Category.OTHER;
+    @OneToMany(mappedBy = "receipt", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<ReceiptItem> items = new ArrayList<>();
 
     private LocalDate date;
 
@@ -42,11 +47,10 @@ public class Receipt {
     private Instant createdAt;
 
     protected Receipt() {}
-    public Receipt(String merchantName, String currency, BigDecimal totalAmount, Category category, LocalDate date, String rawImagePath, String geminiRawResponse) {
+    public Receipt(String merchantName, String currency, BigDecimal totalAmount,  LocalDate date, String rawImagePath, String geminiRawResponse) {
         this.merchantName = merchantName;
         this.currency = currency;
         this.totalAmount = totalAmount;
-        this.category = category;
         this.date = date;
         this.rawImagePath = rawImagePath;
         this.geminiRawResponse = geminiRawResponse;
@@ -69,8 +73,16 @@ public class Receipt {
         return totalAmount;
     }
 
-    public Category getCategory() {
-        return category;
+    public User getUser() {
+        return user;
+    }
+
+    public String getGeminiRawResponse() {
+        return geminiRawResponse;
+    }
+
+    public List<ReceiptItem> getItems() {
+        return items;
     }
 
     public LocalDate getDate() {

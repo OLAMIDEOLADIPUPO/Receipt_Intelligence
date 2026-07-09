@@ -3,9 +3,11 @@ package com.olamide.receipthandler.controllers;
 import com.olamide.receipthandler.dto.ReceiptResponseDTO;
 import com.olamide.receipthandler.dto.SpendingSummary;
 import com.olamide.receipthandler.enums.Category;
+import com.olamide.receipthandler.models.User;
 import com.olamide.receipthandler.service.ReceiptService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -23,10 +25,11 @@ public class ReceiptController {
     }
 
     @PostMapping("/upload")
-    public ResponseEntity<ReceiptResponseDTO> uploadReceipt(@RequestParam("file") MultipartFile file) {
-
+    public ResponseEntity<ReceiptResponseDTO> uploadReceipt(
+            @RequestParam("file") MultipartFile file,
+            @AuthenticationPrincipal User user) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(receiptService.processReceipt(file));
+                .body(receiptService.processReceipt(file, user));
     }
 
     @GetMapping
