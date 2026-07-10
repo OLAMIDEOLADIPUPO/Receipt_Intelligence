@@ -47,7 +47,8 @@ public class Receipt {
     private Instant createdAt;
 
     protected Receipt() {}
-    public Receipt(String merchantName, String currency, BigDecimal totalAmount,  LocalDate date, String rawImagePath, String geminiRawResponse) {
+    public Receipt(User user,String merchantName, String currency, BigDecimal totalAmount,  LocalDate date, String rawImagePath, String geminiRawResponse) {
+        this.user = user;
         this.merchantName = merchantName;
         this.currency = currency;
         this.totalAmount = totalAmount;

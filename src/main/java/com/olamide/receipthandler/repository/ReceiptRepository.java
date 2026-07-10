@@ -13,9 +13,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface ReceiptRepository extends JpaRepository<Receipt, UUID> {
-    List<Receipt> findByCategoryOrderByCreatedAtDesc(Category category);
-    List<Receipt> findAllByOrderByCreatedAtDesc();
-    List<Receipt> findByUserAndDateIsNull();
+
+    List<Receipt> findByUserAndDateIsNull(User user);
     List<Receipt> findByUserOrderByCreatedAtDesc(User user);
     Optional<Receipt> findByIdAndUser(UUID id, User user);
 
