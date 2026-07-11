@@ -2,14 +2,16 @@ package com.olamide.receipthandler.exceptions;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.stream.Collectors;
 
-@RestControllerAdvice
+@ControllerAdvice
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(GeminiParseException.class)
@@ -19,17 +21,17 @@ public class GlobalExceptionHandler {
                 ex.getMessage(),
                 LocalDateTime.now()
         );
-        return  ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT).body(error);
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT).body(error);
     }
 
     @ExceptionHandler(GeminiServiceException.class)
     public ResponseEntity<ErrorResponse> handleGeminiServiceDown(GeminiServiceException ex) {
-     ErrorResponse error = new ErrorResponse(
-             "RECEIPT_READING_SERVICE_UNAVAILABLE",
-             ex.getMessage(),
-             LocalDateTime.now()
-     );
-     return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(error);
+        ErrorResponse error = new ErrorResponse(
+                "RECEIPT_READING_SERVICE_UNAVAILABLE",
+                ex.getMessage(),
+                LocalDateTime.now()
+        );
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(error);
     }
 
     @ExceptionHandler(InvalidFileException.class)
@@ -50,7 +52,6 @@ public class GlobalExceptionHandler {
                 LocalDateTime.now()
         );
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
-
     }
 
     @ExceptionHandler(DateTimeParseException.class)
@@ -62,20 +63,46 @@ public class GlobalExceptionHandler {
         );
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGeneral(Exception ex) {
+
+    @ExceptionHandler(EmailAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handleEmailAlreadyExists(EmailAlreadyExistsException ex) {
         ErrorResponse error = new ErrorResponse(
-                "INTERNAL_SERVER_ERROR",
-                "An unexpected error occurred. Please try again.",
+                "EMAIL_ALREADY_EXISTS",
+                ex.getMessage(),
                 LocalDateTime.now()
         );
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
-    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidCredentials(InvalidCredentialsException ex) {
         ErrorResponse error = new ErrorResponse(
-                "INVALID_PARAMETER",
-                "Invalid value for parameter '" + ex.getName() + "': " + ex.getValue(),
+                "INVALID_CREDENTIALS",
+                ex.getMessage(),
+                LocalDateTime.now()
+        );
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex) {
+        ErrorResponse error = new ErrorResponse(
+                "UNAUTHORIZED",
+                ex.getMessage(),
+                LocalDateTime.now()
+        );
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleValidationException(MethodArgumentNotValidException ex) {
+        String message = ex.getBindingResult().getFieldErrors().stream()
+                .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
+                .collect(Collectors.joining("; "));
+
+        ErrorResponse error = new ErrorResponse(
+                "VALIDATION_FAILED",
+                message,
                 LocalDateTime.now()
         );
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);

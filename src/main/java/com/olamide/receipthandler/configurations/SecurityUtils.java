@@ -19,8 +19,4 @@ public class SecurityUtils {
             throw new AccessDeniedException("Unexpected user type.");
         }
     }
-    public static boolean isOwner(String walletOwnerEmail) {
-        User currentUser = getAuthenticatedUser();
-        return currentUser.getEmail().equals(walletOwnerEmail);
-    }
 }

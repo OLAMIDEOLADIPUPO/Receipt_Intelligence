@@ -5,6 +5,7 @@ import com.olamide.receipthandler.dto.AuthResponse;
 import com.olamide.receipthandler.dto.LoginRequest;
 import com.olamide.receipthandler.dto.RegisterRequest;
 import com.olamide.receipthandler.service.AuthService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,7 +21,7 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@RequestBody RegisterRequest request) {
+    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
     }
 

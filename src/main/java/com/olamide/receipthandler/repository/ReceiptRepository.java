@@ -1,6 +1,5 @@
 package com.olamide.receipthandler.repository;
 
-import com.olamide.receipthandler.enums.Category;
 import com.olamide.receipthandler.models.Receipt;
 import com.olamide.receipthandler.models.User;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -20,18 +19,6 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID> {
 
     @Query("""
         SELECT r FROM Receipt r
-        JOIN r.items i
-        WHERE r.user = :user
-        AND i.category = :category
-        ORDER BY r.createdAt DESC
-        """)
-    List<Receipt> findByUserAndItemCategory(
-            @Param("user") User user,
-            @Param("category") Category category
-    );
-
-    @Query("""
-        SELECT r FROM Receipt r
         WHERE r.user = :user
         AND r.date BETWEEN :start AND :end
         ORDER BY r.createdAt DESC
@@ -41,6 +28,4 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID> {
             @Param("start") LocalDate start,
             @Param("end") LocalDate end
     );
-
-
 }

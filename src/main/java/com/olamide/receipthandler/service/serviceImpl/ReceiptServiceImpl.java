@@ -55,7 +55,6 @@ public class ReceiptServiceImpl implements ReceiptService {
             throw new GeminiParseException("The uploaded file does not appear to be a receipt.");
         }
 
-
         Receipt receipt = new Receipt(
                 currentUser,
                 receiptData.merchantName(),
@@ -66,7 +65,6 @@ public class ReceiptServiceImpl implements ReceiptService {
                 result.rawResponse()
         );
         Receipt saved = receiptRepository.save(receipt);
-
 
         List<ReceiptItem> items = new ArrayList<>();
         if (receiptData.items() != null && !receiptData.items().isEmpty()) {
@@ -83,21 +81,11 @@ public class ReceiptServiceImpl implements ReceiptService {
     }
 
     @Override
-    public List<ReceiptResponseDTO> getAllReceipts(Category category) {
+    public List<ReceiptResponseDTO> getAllReceipts() {
         User currentUser = getCurrentUser();
 
-        List<Receipt> receipts = category != null
-                ? receiptRepository.findByUserAndItemCategory(currentUser, category)
-                : receiptRepository.findByUserOrderByCreatedAtDesc(currentUser);
-
-        // For each receipt, load its items and map to DTO
-        return receipts.stream()
-                .map(receipt -> {
-                    List<ReceiptItem> items = receiptItemRepository
-                            .findByReceiptId(receipt.getId());
-                    return mapToDto(receipt, items);
-                })
-                .collect(Collectors.toList());
+        List<Receipt> receipts = receiptRepository.findByUserOrderByCreatedAtDesc(currentUser);
+        return mapReceiptsToDto(receipts);
     }
 
     @Override
@@ -110,11 +98,14 @@ public class ReceiptServiceImpl implements ReceiptService {
         List<Receipt> receiptsThisMonth = receiptRepository
                 .findByUserAndDateBetween(currentUser, start, end);
 
-        // Category totals now come from ReceiptItems, not Receipt directly
-        // We load all items for all receipts this month, then group by category
-        List<ReceiptItem> allItems = receiptsThisMonth.stream()
-                .flatMap(r -> receiptItemRepository.findByReceiptId(r.getId()).stream())
+        List<UUID> receiptIds = receiptsThisMonth.stream()
+                .map(Receipt::getId)
                 .toList();
+
+        // Single batch query instead of one query per receipt.
+        List<ReceiptItem> allItems = receiptIds.isEmpty()
+                ? List.of()
+                : receiptItemRepository.findByReceiptIdIn(receiptIds);
 
         Map<Category, List<ReceiptItem>> groupedByCategory = allItems.stream()
                 .collect(Collectors.groupingBy(ReceiptItem::getCategory));
@@ -138,9 +129,7 @@ public class ReceiptServiceImpl implements ReceiptService {
 
         String period = yearMonth.getMonth().toString() + " " + yearMonth.getYear();
 
-        // Receipts where Gemini couldn't extract a date — scoped to current user
-        List<Receipt> receiptsWithNoDate = receiptRepository
-                .findByUserAndDateIsNull(currentUser);
+        List<Receipt> receiptsWithNoDate = receiptRepository.findByUserAndDateIsNull(currentUser);
         BigDecimal unknownDateTotal = receiptsWithNoDate.stream()
                 .map(Receipt::getTotalAmount)
                 .filter(Objects::nonNull)
@@ -153,7 +142,7 @@ public class ReceiptServiceImpl implements ReceiptService {
 
     @Override
     public ReceiptResponseDTO getReceiptById(UUID id) {
-        User currentUser = SecurityUtils.getAuthenticatedUser();
+        User currentUser = getCurrentUser();
 
         Receipt receipt = receiptRepository.findByIdAndUser(id, currentUser)
                 .orElseThrow(() -> new ReceiptNotFoundException("No receipt with this id"));
@@ -162,9 +151,45 @@ public class ReceiptServiceImpl implements ReceiptService {
         return mapToDto(receipt, items);
     }
 
-    // mapToDto now takes both the receipt AND its items
-    // because ReceiptResponseDTO needs to include the items list
-    // and Receipt entity no longer has a category field
+    @Override
+    public List<ReceiptItemWithContextDTO> getItemsByCategory(Category category) {
+        User currentUser = getCurrentUser();
+
+        List<ReceiptItem> items = receiptItemRepository.findByUserAndCategory(currentUser, category);
+
+        return items.stream()
+                .map(item -> new ReceiptItemWithContextDTO(
+                        item.getId(),
+                        item.getName(),
+                        item.getAmount(),
+                        item.getCategory(),
+                        item.getReceipt().getId(),
+                        item.getReceipt().getMerchantName(),
+                        item.getReceipt().getDate()
+                ))
+                .collect(Collectors.toList());
+    }
+
+    // Maps a list of receipts to DTOs, batch-loading all their items
+    // in a single query rather than one query per receipt.
+    private List<ReceiptResponseDTO> mapReceiptsToDto(List<Receipt> receipts) {
+        List<UUID> receiptIds = receipts.stream().map(Receipt::getId).toList();
+
+        List<ReceiptItem> allItems = receiptIds.isEmpty()
+                ? List.of()
+                : receiptItemRepository.findByReceiptIdIn(receiptIds);
+
+        Map<UUID, List<ReceiptItem>> itemsByReceiptId = allItems.stream()
+                .collect(Collectors.groupingBy(item -> item.getReceipt().getId()));
+
+        return receipts.stream()
+                .map(receipt -> mapToDto(
+                        receipt,
+                        itemsByReceiptId.getOrDefault(receipt.getId(), List.of())
+                ))
+                .collect(Collectors.toList());
+    }
+
     private ReceiptResponseDTO mapToDto(Receipt receipt, List<ReceiptItem> items) {
         List<ReceiptItemDTO> itemDTOs = items.stream()
                 .map(item -> new ReceiptItemDTO(
@@ -203,7 +228,8 @@ public class ReceiptServiceImpl implements ReceiptService {
             throw new InvalidFileException("Please upload a JPEG, PNG, WEBP, or PDF file.");
         }
     }
-    private User getCurrentUser(){
+
+    private User getCurrentUser() {
         return SecurityUtils.getAuthenticatedUser();
     }
 }
