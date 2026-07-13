@@ -102,7 +102,7 @@ public class ReceiptServiceImpl implements ReceiptService {
                 .map(Receipt::getId)
                 .toList();
 
-        // Single batch query instead of one query per receipt.
+
         List<ReceiptItem> allItems = receiptIds.isEmpty()
                 ? List.of()
                 : receiptItemRepository.findByReceiptIdIn(receiptIds);
@@ -170,8 +170,7 @@ public class ReceiptServiceImpl implements ReceiptService {
                 .collect(Collectors.toList());
     }
 
-    // Maps a list of receipts to DTOs, batch-loading all their items
-    // in a single query rather than one query per receipt.
+
     private List<ReceiptResponseDTO> mapReceiptsToDto(List<Receipt> receipts) {
         List<UUID> receiptIds = receipts.stream().map(Receipt::getId).toList();
 
