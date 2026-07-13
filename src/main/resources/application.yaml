@@ -3,7 +3,7 @@ spring:
     name: ReceiptHandler
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/receipt_scanner
+    url: jdbc:postgresql://localhost:5432/receipt_scanner_dev
     username: postgres
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
@@ -40,5 +40,5 @@ gemini:
 
 jwt:
   secret: ${JWT_SECRET_KEY}
-  expiration: 86400000
+  expiration: 900
 
