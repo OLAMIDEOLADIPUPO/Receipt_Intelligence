@@ -54,6 +54,11 @@ public class ReceiptServiceImpl implements ReceiptService {
         if (!Boolean.TRUE.equals(receiptData.isReceipt())) {
             throw new GeminiParseException("The uploaded file does not appear to be a receipt.");
         }
+        if (receiptData.totalAmount() == null && receiptData.merchantName() == null) {
+            throw new GeminiParseException(
+                    "Receipt was too blurry to read. Please upload a clearer image."
+            );
+        }
 
         Receipt receipt = new Receipt(
                 currentUser,

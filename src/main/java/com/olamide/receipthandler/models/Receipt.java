@@ -12,7 +12,12 @@ import java.util.List;
 import java.util.UUID;
 
 @Entity
-@Table(name = "receipt")
+@Table(name = "receipt", indexes = {
+        @Index(name = "idx_receipt_user_id", columnList = "user_id"),
+        @Index(name = "idx_receipt_date", columnList = "date"),
+        @Index(name = "idx_receipt_created_at", columnList = "createdAt"),
+        @Index(name = "idx_receipt_user_date", columnList = "user_id, date")
+})
 public class Receipt {
 
     @Id

@@ -19,7 +19,7 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     // Joins through Receipt because ReceiptItem has no direct User reference.
     @Query("""
         SELECT i FROM ReceiptItem i
-        JOIN i.receipt r
+        JOIN FETCH i.receipt r
         WHERE r.user = :user
         AND i.category = :category
         ORDER BY r.createdAt DESC

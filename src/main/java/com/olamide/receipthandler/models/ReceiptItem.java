@@ -6,7 +6,11 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 @Entity
-@Table(name = "receipt_items")
+@Table(name = "receipt_items", indexes = {
+        @Index(name = "idx_receiptitem_receipt_id", columnList = "receipt_id"),
+        @Index(name = "idx_receiptitem_category", columnList = "category")
+})
+
 public class ReceiptItem {
 
     @Id
