@@ -12,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 import tools.jackson.databind.ObjectMapper;
@@ -23,6 +24,8 @@ import java.util.Map;
 
 @Component
 public class GeminiClient {
+    private static final int MAX_RETRIES = 2;
+    private static final long INITIAL_BACKOFF_MS = 1000L;
 
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate;
@@ -59,15 +62,42 @@ public class GeminiClient {
         String urlWithKey = UriComponentsBuilder.fromUriString(apiUrl)
                 .queryParam("key", apiKey)
                 .toUriString();
+        long backoffMs = INITIAL_BACKOFF_MS;
+        for(int attempt = 0; attempt<=MAX_RETRIES; attempt++){
 
-        try{
-            return restTemplate.postForEntity(urlWithKey, request, GeminiResponse.class);
+            try{
+                return restTemplate.postForEntity(urlWithKey, request, GeminiResponse.class);
+            }
+            catch(HttpClientErrorException.TooManyRequests e){
+                if (attempt == MAX_RETRIES){
+                    throw new GeminiServiceException ("Gemini rate limit exceeded after " + MAX_RETRIES + " retries: " + e.getMessage());
+                }
+                sleep(backoffMs);
+                backoffMs *=2;
+
+
+            }
+            catch(HttpServerErrorException e ){
+                if (attempt == MAX_RETRIES){
+                    throw new GeminiParseException("Gemini server error after " + MAX_RETRIES + " retries: " + e.getMessage());
+                }
+                sleep(backoffMs);
+                backoffMs *=2;
+            }
+            catch (HttpClientErrorException e) {
+                // Any other 4xx - bad request, invalid key, etc. Not transient, don't retry.
+                throw new GeminiServiceException("Gemini API rejected the request: " + e.getMessage());
+            }
+            catch (Exception e) {
+                // Network-level failure (timeout, connection reset, etc.) - worth one retry
+                if (attempt == MAX_RETRIES) {
+                    throw new GeminiServiceException("Gemini API call failed: " + e.getMessage());
+                }
+                sleep(backoffMs);
+                backoffMs *= 2;
+            }
         }
-        catch(Exception e){
-            throw new GeminiServiceException("Gemini API call failed " + e.getMessage());
-        }
-
-
+        throw new GeminiServiceException("Gemini API call failed after retries");
     }
 
     private String extractText(ResponseEntity<GeminiResponse> response){
@@ -125,6 +155,14 @@ public class GeminiClient {
                 "contents", List.of(content)
         );
     }
+    private void sleep(long millis){
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new GeminiParseException("Retry Interrupted");
+        }
+    }
     private String buildPrompt() {
         return """
         You are a receipt parser. Extract data from this receipt image and return
@@ -164,6 +202,7 @@ public class GeminiClient {
 
         Return the JSON object now, with no other text before or after it.
         """;
+
     }
 
     }
