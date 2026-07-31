@@ -1,6 +1,7 @@
 package com.olamide.receipthandler.models;
 
-import com.olamide.receipthandler.enums.Category;
+
+import com.olamide.receipthandler.enums.ProcessingStatus;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 
@@ -16,7 +17,8 @@ import java.util.UUID;
         @Index(name = "idx_receipt_user_id", columnList = "user_id"),
         @Index(name = "idx_receipt_date", columnList = "date"),
         @Index(name = "idx_receipt_created_at", columnList = "createdAt"),
-        @Index(name = "idx_receipt_user_date", columnList = "user_id, date")
+        @Index(name = "idx_receipt_user_date", columnList = "user_id, date"),
+        @Index(name = "idx_receipt_staff_id", columnList = "staff_id")
 })
 public class Receipt {
 
@@ -27,6 +29,14 @@ public class Receipt {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
+
+    // Nullable — existing receipts predate staff tracking, and the current
+    // single-file upload path (ReceiptServiceImpl.processReceipt) doesn't
+    // collect a staff member yet. Task 5's batch upload endpoint is what
+    // will start populating this on every new receipt going forward.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "staff_id", nullable = true)
+    private Staff staff;
 
     @Column(nullable = true)
     private String merchantName;
@@ -41,18 +51,29 @@ public class Receipt {
 
     private LocalDate date;
 
-    @Column(nullable = true,columnDefinition = "TEXT")
+    @Column(nullable = true, columnDefinition = "TEXT")
     private String geminiRawResponse;
 
     @Column(nullable = true)
     private String rawImagePath;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, columnDefinition = "varchar(255) default 'COMPLETED'")
+    private ProcessingStatus status = ProcessingStatus.PENDING;
+
+    @Column(nullable = true, columnDefinition = "TEXT")
+    private String errorMessage;
+
     @CreationTimestamp
-    @Column(nullable = false,updatable = false)
+    @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
     protected Receipt() {}
-    public Receipt(User user,String merchantName, String currency, BigDecimal totalAmount,  LocalDate date, String rawImagePath, String geminiRawResponse) {
+
+    // Original constructor kept in case anything else constructs a fully-formed
+    // Receipt in one shot. Not used by the async upload path anymore.
+    public Receipt(User user, String merchantName, String currency, BigDecimal totalAmount,
+                   LocalDate date, String rawImagePath, String geminiRawResponse) {
         this.user = user;
         this.merchantName = merchantName;
         this.currency = currency;
@@ -60,47 +81,46 @@ public class Receipt {
         this.date = date;
         this.rawImagePath = rawImagePath;
         this.geminiRawResponse = geminiRawResponse;
-
+        this.status = ProcessingStatus.COMPLETED;
     }
 
-    public UUID getId() {
-        return id;
+    // Existing placeholder constructor for the async flow. Unchanged —
+    // still used by the current single-file processReceipt() path, which
+    // doesn't tag a staff member. staff stays null for receipts created
+    // this way.
+    public Receipt(User user, String currency) {
+        this.user = user;
+        this.currency = currency;
     }
 
-    public String getMerchantName() {
-        return merchantName;
+    // New: placeholder constructor for the staff-tagged batch upload flow
+    // (task 5). Same async-fill-in-later pattern as above, plus staff set
+    // at creation time since the batch flow collects it before upload.
+    public Receipt(User user, String currency, Staff staff) {
+        this.user = user;
+        this.currency = currency;
+        this.staff = staff;
     }
 
-    public String getCurrency() {
-        return currency;
-    }
+    public UUID getId() { return id; }
+    public String getMerchantName() { return merchantName; }
+    public String getCurrency() { return currency; }
+    public BigDecimal getTotalAmount() { return totalAmount; }
+    public User getUser() { return user; }
+    public Staff getStaff() { return staff; }
+    public String getGeminiRawResponse() { return geminiRawResponse; }
+    public List<ReceiptItem> getItems() { return items; }
+    public LocalDate getDate() { return date; }
+    public String getRawImagePath() { return rawImagePath; }
+    public Instant getCreatedAt() { return createdAt; }
+    public ProcessingStatus getStatus() { return status; }
+    public String getErrorMessage() { return errorMessage; }
 
-    public BigDecimal getTotalAmount() {
-        return totalAmount;
-    }
-
-    public User getUser() {
-        return user;
-    }
-
-    public String getGeminiRawResponse() {
-        return geminiRawResponse;
-    }
-
-    public List<ReceiptItem> getItems() {
-        return items;
-    }
-
-    public LocalDate getDate() {
-        return date;
-    }
-
-    public String getRawImagePath() {
-        return rawImagePath;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
-
+    public void setMerchantName(String merchantName) { this.merchantName = merchantName; }
+    public void setTotalAmount(BigDecimal totalAmount) { this.totalAmount = totalAmount; }
+    public void setDate(LocalDate date) { this.date = date; }
+    public void setGeminiRawResponse(String geminiRawResponse) { this.geminiRawResponse = geminiRawResponse; }
+    public void setStatus(ProcessingStatus status) { this.status = status; }
+    public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+    public void setStaff(Staff staff) { this.staff = staff; }
 }

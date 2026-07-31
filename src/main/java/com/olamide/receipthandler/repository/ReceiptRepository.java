@@ -1,6 +1,8 @@
 package com.olamide.receipthandler.repository;
 
+import com.olamide.receipthandler.enums.ProcessingStatus;
 import com.olamide.receipthandler.models.Receipt;
+import com.olamide.receipthandler.models.Staff;
 import com.olamide.receipthandler.models.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -25,6 +27,35 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID> {
         """)
     List<Receipt> findByUserAndDateBetween(
             @Param("user") User user,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end
+    );
+
+    List<Receipt> findByStaffOrderByCreatedAtDesc(Staff staff);
+
+    @Query("""
+        SELECT r FROM Receipt r
+        WHERE r.staff = :staff
+        AND r.date BETWEEN :start AND :end
+        ORDER BY r.createdAt DESC
+        """)
+    List<Receipt> findByStaffAndDateBetween(
+            @Param("staff") Staff staff,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end
+    );
+
+    @Query("""
+    SELECT r FROM Receipt r
+    LEFT JOIN FETCH r.staff s
+    WHERE r.user = :user
+    AND r.status = :status
+    AND r.date BETWEEN :start AND :end
+    ORDER BY s.name ASC NULLS LAST, r.date ASC
+    """)
+    List<Receipt> findForExport(
+            @Param("user") User user,
+            @Param("status") ProcessingStatus status,
             @Param("start") LocalDate start,
             @Param("end") LocalDate end
     );

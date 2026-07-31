@@ -1,11 +1,12 @@
 package com.olamide.receipthandler.controllers;
 
-import com.olamide.receipthandler.dto.ReceiptItemWithContextDTO;
-import com.olamide.receipthandler.dto.ReceiptResponseDTO;
-import com.olamide.receipthandler.dto.SpendingSummary;
+import com.olamide.receipthandler.dto.*;
 import com.olamide.receipthandler.enums.Category;
+import com.olamide.receipthandler.service.ReceiptExcelExportService;
 import com.olamide.receipthandler.service.ReceiptService;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -18,15 +19,25 @@ import java.util.UUID;
 @RequestMapping("api/receipts")
 public class ReceiptController {
     private final ReceiptService receiptService;
+    private final ReceiptExcelExportService receiptExcelExportService;
 
-    public ReceiptController(ReceiptService receiptService) {
+    public ReceiptController(ReceiptService receiptService, ReceiptExcelExportService receiptExcelExportService) {
         this.receiptService = receiptService;
+        this.receiptExcelExportService = receiptExcelExportService;
     }
 
     @PostMapping("/upload")
     public ResponseEntity<ReceiptResponseDTO> uploadReceipt(@RequestParam("file") MultipartFile file) {
-        return ResponseEntity.status(HttpStatus.CREATED)
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(receiptService.processReceipt(file));
+    }
+
+    @PostMapping("/upload-batch")
+    public ResponseEntity<BatchUploadResponseDTO> uploadBatch(
+            @RequestParam("staffId") UUID staffId,
+            @RequestParam("files") List<MultipartFile> files) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(receiptService.processBatch(staffId, files));
     }
 
     @GetMapping
@@ -57,5 +68,19 @@ public class ReceiptController {
     public ResponseEntity<List<ReceiptItemWithContextDTO>> getItemsByCategory(
             @RequestParam Category category) {
         return ResponseEntity.ok(receiptService.getItemsByCategory(category));
+    }
+    @GetMapping("/export")
+    public ResponseEntity<byte[]> exportMonth(@RequestParam(required = false) String month) {
+        YearMonth target = (month != null && !month.isBlank())
+                ? YearMonth.parse(month)
+                : YearMonth.now();
+
+        ExcelExportResult result = receiptExcelExportService.exportMonth(target);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + result.filename() + "\"")
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(result.content());
     }
 }

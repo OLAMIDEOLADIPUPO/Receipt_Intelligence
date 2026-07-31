@@ -116,5 +116,14 @@ public class GlobalExceptionHandler {
         );
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
     }
+    @ExceptionHandler(ExcelExportException.class)
+    public ResponseEntity<ErrorResponse> handleExcelExportException(ExcelExportException ex) {
+        ErrorResponse error = new ErrorResponse(
+                "EXCEL_EXPORT_FAILED",
+                ex.getMessage(),
+                LocalDateTime.now()
+        );
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+    }
 
 }

@@ -1,5 +1,7 @@
 package com.olamide.receipthandler.dto;
 
+import com.olamide.receipthandler.enums.ProcessingStatus;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -13,5 +15,7 @@ public record ReceiptResponseDTO(
         String currency,
         LocalDate receiptDate,
         Instant createdAt,
-        List<ReceiptItemDTO> items
+        List<ReceiptItemDTO> items,
+        ProcessingStatus status,
+        String errorMessage
 ) {}

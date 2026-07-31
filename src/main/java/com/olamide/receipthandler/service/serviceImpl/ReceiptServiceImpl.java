@@ -8,8 +8,8 @@ import com.olamide.receipthandler.models.*;
 import com.olamide.receipthandler.repository.*;
 import com.olamide.receipthandler.service.GeminiClient;
 import com.olamide.receipthandler.service.ReceiptService;
+import com.olamide.receipthandler.service.async.ReceiptAsyncProcessor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -24,7 +24,8 @@ public class ReceiptServiceImpl implements ReceiptService {
 
     private final ReceiptRepository receiptRepository;
     private final ReceiptItemRepository receiptItemRepository;
-    private final GeminiClient geminiClient;
+    private final ReceiptAsyncProcessor receiptAsyncProcessor;
+    private final StaffRepository staffRepository;
 
     private static final Set<String> ALLOWED_MIME_TYPES = Set.of(
             "image/jpeg", "image/png", "image/webp", "application/pdf"
@@ -33,14 +34,15 @@ public class ReceiptServiceImpl implements ReceiptService {
 
     public ReceiptServiceImpl(ReceiptRepository receiptRepository,
                               ReceiptItemRepository receiptItemRepository,
-                              GeminiClient geminiClient) {
+                              ReceiptAsyncProcessor receiptAsyncProcessor,
+                              StaffRepository staffRepository) {
         this.receiptRepository = receiptRepository;
         this.receiptItemRepository = receiptItemRepository;
-        this.geminiClient = geminiClient;
+        this.receiptAsyncProcessor = receiptAsyncProcessor;
+        this.staffRepository = staffRepository;
     }
 
     @Override
-    @Transactional
     public ReceiptResponseDTO processReceipt(MultipartFile file) {
         User currentUser = getCurrentUser();
 
@@ -48,47 +50,50 @@ public class ReceiptServiceImpl implements ReceiptService {
         byte[] fileBytes = readBytes(file);
         String mimeType = file.getContentType();
 
-        GeminiAnalysisResult result = geminiClient.analyzeReceipt(fileBytes, mimeType);
-        GeminiReceiptData receiptData = result.geminiReceiptData();
+        Receipt placeholder = new Receipt(currentUser, DEFAULT_CURRENCY);
+        Receipt saved = receiptRepository.save(placeholder);
+        receiptAsyncProcessor.processReceiptAsync(saved.getId(), fileBytes, mimeType);
 
-        if (!Boolean.TRUE.equals(receiptData.isReceipt())) {
-            throw new GeminiParseException("The uploaded file does not appear to be a receipt.");
-        }
-        if (receiptData.totalAmount() == null && receiptData.merchantName() == null) {
-            throw new GeminiParseException(
-                    "Receipt was too blurry to read. Please upload a clearer image."
-            );
-        }
+        return mapToDto(saved, List.of());
+    }
 
-        Receipt receipt = new Receipt(
-                currentUser,
-                receiptData.merchantName(),
-                DEFAULT_CURRENCY,
-                receiptData.totalAmount(),
-                receiptData.receiptDate(),
-                null,
-                result.rawResponse()
-        );
-        Receipt saved = receiptRepository.save(receipt);
+    @Override
+    public BatchUploadResponseDTO processBatch(UUID staffId, List<MultipartFile> files) {
+        User currentUser = getCurrentUser();
 
-        List<ReceiptItem> items = new ArrayList<>();
-        if (receiptData.items() != null && !receiptData.items().isEmpty()) {
-            items = receiptData.items().stream()
-                    .map(item -> {
-                        Category category = Category.fromString(item.category());
-                        return new ReceiptItem(saved, item.name(), item.amount(), category);
-                    })
-                    .collect(Collectors.toList());
-            receiptItemRepository.saveAll(items);
+        Staff staff = staffRepository.findById(staffId)
+                .orElseThrow(() -> new IllegalArgumentException("Staff not found: " + staffId));
+
+        if (files == null || files.isEmpty()) {
+            throw new InvalidFileException("No files were uploaded.");
         }
 
-        return mapToDto(saved, items);
+        List<ReceiptResponseDTO> accepted = new ArrayList<>();
+        List<BatchUploadResponseDTO.BatchFileError> rejected = new ArrayList<>();
+
+        for (MultipartFile file : files) {
+            try {
+                validateFile(file);
+                byte[] fileBytes = readBytes(file);
+                String mimeType = file.getContentType();
+
+                Receipt placeholder = new Receipt(currentUser, DEFAULT_CURRENCY, staff);
+                Receipt saved = receiptRepository.save(placeholder);
+                receiptAsyncProcessor.processReceiptAsync(saved.getId(), fileBytes, mimeType);
+
+                accepted.add(mapToDto(saved, List.of()));
+            } catch (InvalidFileException e) {
+                String name = file != null ? file.getOriginalFilename() : "unknown";
+                rejected.add(new BatchUploadResponseDTO.BatchFileError(name, e.getMessage()));
+            }
+        }
+
+        return new BatchUploadResponseDTO(accepted, rejected);
     }
 
     @Override
     public List<ReceiptResponseDTO> getAllReceipts() {
         User currentUser = getCurrentUser();
-
         List<Receipt> receipts = receiptRepository.findByUserOrderByCreatedAtDesc(currentUser);
         return mapReceiptsToDto(receipts);
     }
@@ -106,7 +111,6 @@ public class ReceiptServiceImpl implements ReceiptService {
         List<UUID> receiptIds = receiptsThisMonth.stream()
                 .map(Receipt::getId)
                 .toList();
-
 
         List<ReceiptItem> allItems = receiptIds.isEmpty()
                 ? List.of()
@@ -175,7 +179,6 @@ public class ReceiptServiceImpl implements ReceiptService {
                 .collect(Collectors.toList());
     }
 
-
     private List<ReceiptResponseDTO> mapReceiptsToDto(List<Receipt> receipts) {
         List<UUID> receiptIds = receipts.stream().map(Receipt::getId).toList();
 
@@ -211,7 +214,9 @@ public class ReceiptServiceImpl implements ReceiptService {
                 receipt.getCurrency(),
                 receipt.getDate(),
                 receipt.getCreatedAt(),
-                itemDTOs
+                itemDTOs,
+                receipt.getStatus(),
+                receipt.getErrorMessage()
         );
     }
 
