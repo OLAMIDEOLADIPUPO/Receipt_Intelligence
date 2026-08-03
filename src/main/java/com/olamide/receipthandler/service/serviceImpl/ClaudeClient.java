@@ -115,6 +115,13 @@ public class ClaudeClient implements ReceiptExtractionService {
         if (body == null) {
             throw new ExtractionServiceException("Claude returned empty response body");
         }
+        // A truncated response yields invalid JSON. Catch it here with a clear message
+        // instead of letting it fail downstream as a confusing "could not parse" error.
+        if ("max_tokens".equals(body.stopReason())) {
+            throw new ExtractionServiceException(
+                    "Claude response was truncated at the token limit (stop_reason=max_tokens); "
+                            + "increase claude.api.max-tokens (currently " + maxTokens + ")");
+        }
         try {
             return body.content().stream()
                     .filter(block -> "text".equals(block.type()))
