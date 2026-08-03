@@ -6,7 +6,6 @@ import com.olamide.receipthandler.enums.Category;
 import com.olamide.receipthandler.exceptions.*;
 import com.olamide.receipthandler.models.*;
 import com.olamide.receipthandler.repository.*;
-import com.olamide.receipthandler.service.GeminiClient;
 import com.olamide.receipthandler.service.ReceiptService;
 import com.olamide.receipthandler.service.async.ReceiptAsyncProcessor;
 import org.springframework.stereotype.Service;

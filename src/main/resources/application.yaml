@@ -42,4 +42,14 @@ jwt:
   secret: ${JWT_SECRET_KEY}
   expiration: 9000000
   refresh-expiration: 604800000
+receipt:
+  extraction:
+    provider: ${RECEIPT_EXTRACTION_PROVIDER:gemini}
+
+claude:
+  api:
+    key: ${CLAUDE_API_KEY:}
+    url: ${CLAUDE_API_URL:https://api.anthropic.com/v1/messages}
+    model: ${CLAUDE_API_MODEL:claude-sonnet-5}
+    max-tokens: ${CLAUDE_API_MAX_TOKENS:1024}
 

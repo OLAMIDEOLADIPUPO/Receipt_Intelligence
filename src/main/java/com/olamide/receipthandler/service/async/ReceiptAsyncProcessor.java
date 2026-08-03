@@ -1,21 +1,20 @@
 package com.olamide.receipthandler.service.async;
 
-import com.olamide.receipthandler.dto.GeminiAnalysisResult;
-import com.olamide.receipthandler.dto.GeminiReceiptData;
+import com.olamide.receipthandler.dto.ExtractedReceiptData;
+import com.olamide.receipthandler.dto.ExtractionResult;
 import com.olamide.receipthandler.enums.Category;
 import com.olamide.receipthandler.enums.ProcessingStatus;
 import com.olamide.receipthandler.models.Receipt;
 import com.olamide.receipthandler.models.ReceiptItem;
 import com.olamide.receipthandler.repository.ReceiptItemRepository;
 import com.olamide.receipthandler.repository.ReceiptRepository;
-import com.olamide.receipthandler.service.GeminiClient;
+import com.olamide.receipthandler.service.ReceiptExtractionService;
 import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -25,29 +24,31 @@ public class ReceiptAsyncProcessor {
     private static final Logger log = LoggerFactory.getLogger(ReceiptAsyncProcessor.class);
     private final ReceiptRepository receiptRepository;
     private final ReceiptItemRepository receiptItemRepository;
-    private final GeminiClient geminiClient;
+    private final ReceiptExtractionService receiptExtractionService;
 
-    public ReceiptAsyncProcessor(ReceiptRepository receiptRepository, ReceiptItemRepository receiptItemRepository, GeminiClient geminiClient) {
+    public ReceiptAsyncProcessor(ReceiptRepository receiptRepository,
+                                 ReceiptItemRepository receiptItemRepository,
+                                 ReceiptExtractionService receiptExtractionService) {
         this.receiptRepository = receiptRepository;
         this.receiptItemRepository = receiptItemRepository;
-        this.geminiClient = geminiClient;
+        this.receiptExtractionService = receiptExtractionService;
     }
 
     @Async("geminiTaskExecutor")
     @Transactional
-    public void processReceiptAsync(UUID receiptId, byte[] fileBytes,String mimeType) {
+    public void processReceiptAsync(UUID receiptId, byte[] fileBytes, String mimeType) {
         Receipt receipt = receiptRepository.findById(receiptId).orElse(null);
         if (receipt == null) {
             log.error("Async processing triggered for missing receipt id={}", receiptId);
             return;
         }
 
-        try{
+        try {
             receipt.setStatus(ProcessingStatus.PROCESSING);
             receiptRepository.save(receipt);
 
-            GeminiAnalysisResult result = geminiClient.analyzeReceipt(fileBytes, mimeType);
-            GeminiReceiptData receiptData = result.geminiReceiptData();
+            ExtractionResult result = receiptExtractionService.extractReceiptData(fileBytes, mimeType);
+            ExtractedReceiptData receiptData = result.extractedReceiptData();
 
             if (!Boolean.TRUE.equals(receiptData.isReceipt())) {
                 failReceipt(receipt, "The uploaded file does not appear to be a receipt.");
@@ -74,17 +75,15 @@ public class ReceiptAsyncProcessor {
                 receiptItemRepository.saveAll(items);
             }
 
-        }catch (Exception e) {
-        log.error("Gemini processing failed for receipt id={}", receiptId, e);
-        failReceipt(receipt, "Processing failed: " + e.getMessage());
-
+        } catch (Exception e) {
+            log.error("Receipt extraction failed for receipt id={}", receiptId, e);
+            failReceipt(receipt, "Processing failed: " + e.getMessage());
         }
-
     }
+
     private void failReceipt(Receipt receipt, String message) {
         receipt.setStatus(ProcessingStatus.FAILED);
         receipt.setErrorMessage(message);
         receiptRepository.save(receipt);
     }
-    
 }

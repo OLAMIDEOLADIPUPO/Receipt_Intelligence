@@ -14,8 +14,8 @@ import java.util.stream.Collectors;
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(GeminiParseException.class)
-    public ResponseEntity<ErrorResponse> handleGeminiParseException(GeminiParseException ex) {
+    @ExceptionHandler(ExtractionParseException.class)
+    public ResponseEntity<ErrorResponse> handleExtractionParseException(ExtractionParseException ex) {
         ErrorResponse error = new ErrorResponse(
                 "COULD_NOT_READ_RECEIPT",
                 ex.getMessage(),
@@ -24,8 +24,8 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT).body(error);
     }
 
-    @ExceptionHandler(GeminiServiceException.class)
-    public ResponseEntity<ErrorResponse> handleGeminiServiceDown(GeminiServiceException ex) {
+    @ExceptionHandler(ExtractionServiceException.class)
+    public ResponseEntity<ErrorResponse> handleExtractionServiceDown(ExtractionServiceException ex) {
         ErrorResponse error = new ErrorResponse(
                 "RECEIPT_READING_SERVICE_UNAVAILABLE",
                 ex.getMessage(),
