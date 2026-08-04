@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -58,5 +59,19 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID> {
             @Param("status") ProcessingStatus status,
             @Param("start") LocalDate start,
             @Param("end") LocalDate end
+    );
+
+    // Rows stuck mid-processing: still PROCESSING but their last write is older
+    // than the cutoff. updatedAt marks when the PROCESSING transition was
+    // persisted; for rows that predate the updatedAt column it's null, so we
+    // fall back to createdAt. Either timestamp older than the cutoff => stuck.
+    @Query("""
+        SELECT r FROM Receipt r
+        WHERE r.status = :status
+        AND COALESCE(r.updatedAt, r.createdAt) < :cutoff
+        """)
+    List<Receipt> findStuckInStatus(
+            @Param("status") ProcessingStatus status,
+            @Param("cutoff") Instant cutoff
     );
 }

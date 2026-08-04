@@ -83,25 +83,29 @@ public class ClaudeClient implements ReceiptExtractionService {
                 return restTemplate.postForEntity(apiUrl, request, ClaudeResponse.class);
             } catch (HttpClientErrorException.TooManyRequests e) {
                 if (attempt == MAX_RETRIES) {
-                    throw new ExtractionServiceException("Claude rate limit exceeded after " + MAX_RETRIES + " retries: " + e.getMessage());
+                    throw new ExtractionServiceException("Claude rate limit exceeded after " + MAX_RETRIES + " retries");
                 }
                 sleep(backoffMs);
                 backoffMs *= 2;
 
             } catch (HttpServerErrorException e) {
                 if (attempt == MAX_RETRIES) {
-                    throw new ExtractionServiceException("Claude server error after " + MAX_RETRIES + " retries: " + e.getMessage());
+                    throw new ExtractionServiceException("Claude server error after " + MAX_RETRIES + " retries (HTTP " + e.getStatusCode() + ")");
                 }
                 sleep(backoffMs);
                 backoffMs *= 2;
             } catch (HttpClientErrorException e) {
                 // Any other 4xx - bad request, invalid key, unsupported media type, etc. Not transient, don't retry.
-                throw new ExtractionServiceException("Claude API rejected the request: " + e.getMessage()
-                        + " | body: " + e.getResponseBodyAsString());
+                // Never surface e.getMessage()/getResponseBodyAsString(): this message is persisted to
+                // Receipt.errorMessage and returned to the client, so it must not carry the provider's raw
+                // error body or any request context. Status code alone is enough to diagnose.
+                throw new ExtractionServiceException("Claude API rejected the request (HTTP " + e.getStatusCode() + ")");
             } catch (Exception e) {
-                // Network-level failure (timeout, connection reset, etc.) - worth one retry
+                // Network-level failure (timeout, connection reset, etc.) - worth one retry.
+                // Never include e.getMessage() here: for I/O errors it embeds the full request URI,
+                // and this message is persisted and returned to the client.
                 if (attempt == MAX_RETRIES) {
-                    throw new ExtractionServiceException("Claude API call failed: " + e.getMessage());
+                    throw new ExtractionServiceException("Claude API call failed after " + MAX_RETRIES + " retries");
                 }
                 sleep(backoffMs);
                 backoffMs *= 2;

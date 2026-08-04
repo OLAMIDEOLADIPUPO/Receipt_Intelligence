@@ -4,6 +4,7 @@ package com.olamide.receipthandler.models;
 import com.olamide.receipthandler.enums.ProcessingStatus;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -68,6 +69,15 @@ public class Receipt {
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
+    // Updated on every persist. For a row stuck in PROCESSING, the last write
+    // before a crash was the PROCESSING transition, so this marks when
+    // processing began — the StuckReceiptReaperJob uses it to detect staleness.
+    // Nullable so ddl-auto can add the column to pre-existing rows; the reaper
+    // falls back to createdAt for rows that predate this field.
+    @UpdateTimestamp
+    @Column(nullable = true)
+    private Instant updatedAt;
+
     protected Receipt() {}
 
     // Original constructor kept in case anything else constructs a fully-formed
@@ -108,11 +118,11 @@ public class Receipt {
     public BigDecimal getTotalAmount() { return totalAmount; }
     public User getUser() { return user; }
     public Staff getStaff() { return staff; }
-    public String getGeminiRawResponse() { return geminiRawResponse; }
+
     public List<ReceiptItem> getItems() { return items; }
     public LocalDate getDate() { return date; }
-    public String getRawImagePath() { return rawImagePath; }
     public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
     public ProcessingStatus getStatus() { return status; }
     public String getErrorMessage() { return errorMessage; }
 

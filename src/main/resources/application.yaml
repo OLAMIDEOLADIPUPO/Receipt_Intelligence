@@ -32,6 +32,16 @@ management:
       exposure:
         include: health
 
+# OpenAPI / Swagger UI. Spec: /v3/api-docs  •  UI: /swagger-ui.html
+# Both paths are permitted without a token in SecurityConfig.
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+
 gemini:
   api:
     key: ${GEMINI_API_KEY}
