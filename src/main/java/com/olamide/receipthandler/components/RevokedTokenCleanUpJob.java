@@ -21,7 +21,7 @@ public class RevokedTokenCleanUpJob {
         this.refreshTokenRepository = refreshTokenRepository;
     }
 
-    @Scheduled(fixedRate = 3600000) // hourly
+    @Scheduled(fixedRateString = "${app.jobs.revoked-token-cleanup.rate}")
     @Transactional
     public void cleanup() {
         revokedTokenRepository.deleteExpiredTokens(Instant.now());

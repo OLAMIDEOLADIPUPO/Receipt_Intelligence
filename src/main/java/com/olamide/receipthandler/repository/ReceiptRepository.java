@@ -4,6 +4,8 @@ import com.olamide.receipthandler.enums.ProcessingStatus;
 import com.olamide.receipthandler.models.Receipt;
 import com.olamide.receipthandler.models.Staff;
 import com.olamide.receipthandler.models.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,7 +19,7 @@ import java.util.UUID;
 public interface ReceiptRepository extends JpaRepository<Receipt, UUID> {
 
     List<Receipt> findByUserAndDateIsNull(User user);
-    List<Receipt> findByUserOrderByCreatedAtDesc(User user);
+    Page<Receipt> findByUserOrderByCreatedAtDesc(User user, Pageable pageable);
     Optional<Receipt> findByIdAndUser(UUID id, User user);
 
     @Query("""

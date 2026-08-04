@@ -63,3 +63,17 @@ claude:
     model: ${CLAUDE_API_MODEL:claude-sonnet-5}
     max-tokens: ${CLAUDE_API_MAX_TOKENS:1024}
 
+# Scheduled background jobs. Durations accept a unit suffix (ms, s, m, h, d),
+# e.g. 30s, 2m, 1h. Change these to retune the jobs without touching code.
+app:
+  jobs:
+    # How often expired revoked/refresh tokens are purged.
+    revoked-token-cleanup:
+      rate: 1h
+    # `rate` is how often the reaper runs; `stuck-after` is how long a receipt
+    # may sit in PROCESSING before it's considered abandoned and marked FAILED.
+    stuck-receipt-reaper:
+      rate: 2m
+      stuck-after: 10m
+
+

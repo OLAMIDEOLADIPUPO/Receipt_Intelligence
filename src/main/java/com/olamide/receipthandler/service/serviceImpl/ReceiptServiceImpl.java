@@ -8,6 +8,9 @@ import com.olamide.receipthandler.models.*;
 import com.olamide.receipthandler.repository.*;
 import com.olamide.receipthandler.service.ReceiptService;
 import com.olamide.receipthandler.service.async.ReceiptAsyncProcessor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -30,6 +33,8 @@ public class ReceiptServiceImpl implements ReceiptService {
             "image/jpeg", "image/png", "image/webp", "application/pdf"
     );
     private static final String DEFAULT_CURRENCY = "NGN";
+    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final int MAX_PAGE_SIZE = 100;
 
     public ReceiptServiceImpl(ReceiptRepository receiptRepository,
                               ReceiptItemRepository receiptItemRepository,
@@ -91,10 +96,12 @@ public class ReceiptServiceImpl implements ReceiptService {
     }
 
     @Override
-    public List<ReceiptResponseDTO> getAllReceipts() {
+    public PagedResponse<ReceiptResponseDTO> getAllReceipts(int page, int size) {
         User currentUser = getCurrentUser();
-        List<Receipt> receipts = receiptRepository.findByUserOrderByCreatedAtDesc(currentUser);
-        return mapReceiptsToDto(receipts);
+        Pageable pageable = toPageable(page, size);
+        Page<Receipt> receiptPage = receiptRepository.findByUserOrderByCreatedAtDesc(currentUser, pageable);
+        List<ReceiptResponseDTO> content = mapReceiptsToDto(receiptPage.getContent());
+        return PagedResponse.of(receiptPage, content);
     }
 
     @Override
@@ -160,12 +167,13 @@ public class ReceiptServiceImpl implements ReceiptService {
     }
 
     @Override
-    public List<ReceiptItemWithContextDTO> getItemsByCategory(Category category) {
+    public PagedResponse<ReceiptItemWithContextDTO> getItemsByCategory(Category category, int page, int size) {
         User currentUser = getCurrentUser();
+        Pageable pageable = toPageable(page, size);
 
-        List<ReceiptItem> items = receiptItemRepository.findByUserAndCategory(currentUser, category);
+        Page<ReceiptItem> itemPage = receiptItemRepository.findByUserAndCategory(currentUser, category, pageable);
 
-        return items.stream()
+        List<ReceiptItemWithContextDTO> content = itemPage.getContent().stream()
                 .map(item -> new ReceiptItemWithContextDTO(
                         item.getId(),
                         item.getName(),
@@ -176,6 +184,8 @@ public class ReceiptServiceImpl implements ReceiptService {
                         item.getReceipt().getDate()
                 ))
                 .collect(Collectors.toList());
+
+        return PagedResponse.of(itemPage, content);
     }
 
     private List<ReceiptResponseDTO> mapReceiptsToDto(List<Receipt> receipts) {
@@ -235,6 +245,16 @@ public class ReceiptServiceImpl implements ReceiptService {
         if (contentType == null || !ALLOWED_MIME_TYPES.contains(contentType)) {
             throw new InvalidFileException("Please upload a JPEG, PNG, WEBP, or PDF file.");
         }
+    }
+
+    // Turns raw page/size request params into a safe Pageable: negative pages
+    // become 0, non-positive sizes fall back to the default, and oversized
+    // requests are capped so a caller can't pull the whole table in one page.
+    // No Sort is attached — ordering is owned by the repository queries.
+    private Pageable toPageable(int page, int size) {
+        int safePage = Math.max(page, 0);
+        int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
+        return PageRequest.of(safePage, safeSize);
     }
 
     private User getCurrentUser() {

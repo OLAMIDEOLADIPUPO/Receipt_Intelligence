@@ -5,6 +5,7 @@ import com.olamide.receipthandler.models.Receipt;
 import com.olamide.receipthandler.repository.ReceiptRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,20 +19,23 @@ public class StuckReceiptReaperJob {
 
     private static final Logger log = LoggerFactory.getLogger(StuckReceiptReaperJob.class);
 
-    // A receipt normally reaches a terminal status in seconds. Anything still
-    // PROCESSING after this long is treated as abandoned and failed.
-    private static final long STUCK_AFTER_MINUTES = 10;
-
     private final ReceiptRepository receiptRepository;
 
-    public StuckReceiptReaperJob(ReceiptRepository receiptRepository) {
+    // A receipt normally reaches a terminal status in seconds. Anything still
+    // PROCESSING after this long is treated as abandoned and failed. Configured
+    // via app.jobs.stuck-receipt-reaper.stuck-after in application.yaml.
+    private final Duration stuckAfter;
+
+    public StuckReceiptReaperJob(ReceiptRepository receiptRepository,
+                                 @Value("${app.jobs.stuck-receipt-reaper.stuck-after}") Duration stuckAfter) {
         this.receiptRepository = receiptRepository;
+        this.stuckAfter = stuckAfter;
     }
 
-    @Scheduled(fixedRate = 120_000) // every 2 minutes
+    @Scheduled(fixedRateString = "${app.jobs.stuck-receipt-reaper.rate}")
     @Transactional
     public void reapStuckReceipts() {
-        Instant cutoff = Instant.now().minus(Duration.ofMinutes(STUCK_AFTER_MINUTES));
+        Instant cutoff = Instant.now().minus(stuckAfter);
         List<Receipt> stuck = receiptRepository.findStuckInStatus(ProcessingStatus.PROCESSING, cutoff);
 
         if (stuck.isEmpty()) {
@@ -45,7 +49,6 @@ public class StuckReceiptReaperJob {
         }
         receiptRepository.saveAll(stuck);
 
-        log.warn("Reaped {} receipt(s) stuck in PROCESSING for over {} minutes",
-                stuck.size(), STUCK_AFTER_MINUTES);
+        log.warn("Reaped {} receipt(s) stuck in PROCESSING for over {}", stuck.size(), stuckAfter);
     }
 }

@@ -1,6 +1,7 @@
 package com.olamide.receipthandler.service;
 
 import com.olamide.receipthandler.dto.BatchUploadResponseDTO;
+import com.olamide.receipthandler.dto.PagedResponse;
 import com.olamide.receipthandler.dto.ReceiptItemWithContextDTO;
 import com.olamide.receipthandler.dto.ReceiptResponseDTO;
 import com.olamide.receipthandler.dto.SpendingSummary;
@@ -16,8 +17,8 @@ public interface ReceiptService {
 
     BatchUploadResponseDTO processBatch(UUID staffId, List<MultipartFile> files);
 
-    List<ReceiptResponseDTO> getAllReceipts();
+    PagedResponse<ReceiptResponseDTO> getAllReceipts(int page, int size);
     SpendingSummary getSpendingSummary(YearMonth yearMonth);
     ReceiptResponseDTO getReceiptById(UUID id);
-    List<ReceiptItemWithContextDTO> getItemsByCategory(Category category);
+    PagedResponse<ReceiptItemWithContextDTO> getItemsByCategory(Category category, int page, int size);
 }

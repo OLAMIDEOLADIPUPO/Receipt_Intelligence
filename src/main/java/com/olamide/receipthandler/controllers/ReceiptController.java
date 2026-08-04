@@ -76,11 +76,17 @@ public class ReceiptController {
     }
 
     @GetMapping
-    @Operation(summary = "List all receipts",
-            description = "Returns the authenticated user's receipts, newest first, including their processing status.")
-    @ApiResponse(responseCode = "200", description = "Receipts returned")
-    public ResponseEntity<List<ReceiptResponseDTO>> getAllReceipts() {
-        return ResponseEntity.ok(receiptService.getAllReceipts());
+    @Operation(summary = "List receipts (paged)",
+            description = "Returns the authenticated user's receipts, newest first, one page at a time. "
+                    + "Walk the pages with `page` and `size`; the response carries `totalElements`, "
+                    + "`totalPages`, and `last` so you know when to stop.")
+    @ApiResponse(responseCode = "200", description = "Page of receipts returned")
+    public ResponseEntity<PagedResponse<ReceiptResponseDTO>> getAllReceipts(
+            @Parameter(description = "Zero-based page number", example = "0")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Receipts per page (1–100; defaults to 20, capped at 100)", example = "20")
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(receiptService.getAllReceipts(page, size));
     }
 
     @GetMapping("/summary")
@@ -118,15 +124,19 @@ public class ReceiptController {
     // receipts it came from — distinct from GET /api/receipts, which
     // always returns whole receipts.
     @GetMapping("/items")
-    @Operation(summary = "List items in a category",
-            description = "Returns individual line items across all receipts for the given category, each carrying "
-                    + "its parent receipt's merchant and date. Answers \"what did I spend on X\" regardless of which "
-                    + "receipt each item came from.")
-    @ApiResponse(responseCode = "200", description = "Items returned")
-    public ResponseEntity<List<ReceiptItemWithContextDTO>> getItemsByCategory(
+    @Operation(summary = "List items in a category (paged)",
+            description = "Returns individual line items across all receipts for the given category, newest first, "
+                    + "each carrying its parent receipt's merchant and date. Answers \"what did I spend on X\" "
+                    + "regardless of which receipt each item came from. Walk the pages with `page` and `size`.")
+    @ApiResponse(responseCode = "200", description = "Page of items returned")
+    public ResponseEntity<PagedResponse<ReceiptItemWithContextDTO>> getItemsByCategory(
             @Parameter(description = "Spending category to filter items by")
-            @RequestParam Category category) {
-        return ResponseEntity.ok(receiptService.getItemsByCategory(category));
+            @RequestParam Category category,
+            @Parameter(description = "Zero-based page number", example = "0")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Items per page (1–100; defaults to 20, capped at 100)", example = "20")
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(receiptService.getItemsByCategory(category, page, size));
     }
 
     @GetMapping("/export")
