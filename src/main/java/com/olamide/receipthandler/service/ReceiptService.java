@@ -17,7 +17,7 @@ public interface ReceiptService {
 
     BatchUploadResponseDTO processBatch(UUID staffId, List<MultipartFile> files);
 
-    PagedResponse<ReceiptResponseDTO> getAllReceipts(int page, int size);
+    PagedResponse<ReceiptResponseDTO> getAllReceipts(YearMonth month, int page, int size);
     SpendingSummary getSpendingSummary(YearMonth yearMonth);
     ReceiptResponseDTO getReceiptById(UUID id);
     PagedResponse<ReceiptItemWithContextDTO> getItemsByCategory(Category category, int page, int size);

@@ -16,12 +16,23 @@ public class ExtractionConfig {
     @Primary
     public ReceiptExtractionService receiptExtractionService(
             @Value("${receipt.extraction.provider:gemini}") String provider,
+            @Value("${claude.api.key:}") String claudeApiKey,
             GeminiClient geminiClient,
             ClaudeClient claudeClient) {
 
         return switch (provider.trim().toLowerCase()) {
             case "gemini" -> geminiClient;
-            case "claude" -> claudeClient;
+            case "claude" -> {
+                // claude.api.key defaults to empty, so a missing key would otherwise
+                // slip through and only surface as an HTTP 401 on the first upload.
+                // Fail fast at startup instead.
+                if (claudeApiKey == null || claudeApiKey.isBlank()) {
+                    throw new IllegalStateException(
+                            "receipt.extraction.provider=claude but claude.api.key is not set. "
+                                    + "Provide CLAUDE_API_KEY to use the Claude provider.");
+                }
+                yield claudeClient;
+            }
             default -> throw new IllegalStateException(
                     "Unknown receipt.extraction.provider: '" + provider
                             + "'. Expected 'gemini' or 'claude'.");

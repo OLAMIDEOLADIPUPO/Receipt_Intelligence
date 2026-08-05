@@ -17,8 +17,8 @@ public class RefreshTokenCookieFactory {
         Cookie cookie = new Cookie(COOKIE_NAME, refreshToken);
         cookie.setHttpOnly(true);
         cookie.setSecure(secure);
-        cookie.setPath("/api/auth");
-        cookie.setAttribute("SameSite", "Strict");
+        cookie.setPath("/");
+        cookie.setAttribute("SameSite", "Lax");
         cookie.setMaxAge(MAX_AGE_SECONDS);
         return cookie;
     }
@@ -27,7 +27,7 @@ public class RefreshTokenCookieFactory {
         Cookie cookie = new Cookie(COOKIE_NAME, null);
         cookie.setHttpOnly(true);
         cookie.setSecure(secure);
-        cookie.setPath("/api/auth");
+        cookie.setPath("/");
         cookie.setMaxAge(0);
         return cookie;
     }

@@ -76,4 +76,5 @@ app:
       rate: 2m
       stuck-after: 10m
 
-
+cookie:
+  secure: false

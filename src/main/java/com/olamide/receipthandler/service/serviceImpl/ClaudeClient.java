@@ -3,7 +3,6 @@ package com.olamide.receipthandler.service.serviceImpl;
 import com.olamide.receipthandler.dto.ClaudeResponse;
 import com.olamide.receipthandler.dto.ExtractedReceiptData;
 import com.olamide.receipthandler.dto.ExtractionResult;
-import com.olamide.receipthandler.exceptions.ExtractionParseException;
 import com.olamide.receipthandler.exceptions.ExtractionServiceException;
 import com.olamide.receipthandler.service.ExtractionJsonUtils;
 import com.olamide.receipthandler.service.ReceiptExtractionPrompt;
@@ -133,28 +132,20 @@ public class ClaudeClient implements ReceiptExtractionService {
                     .orElseThrow()
                     .text();
         } catch (Exception e) {
-            throw new ExtractionServiceException("Unexpected Claude response shape" + e.getMessage());
+            throw new ExtractionServiceException("Unexpected Claude response shape " + e.getMessage());
         }
     }
 
     private Map<String, Object> buildRequestBody(String base64File, String mimeType) {
-        Map<String, Object> filePart = isPdf(mimeType)
-                ? Map.of(
-                        "type", "document",
-                        "source", Map.of(
-                                "type", "base64",
-                                "media_type", mimeType,
-                                "data", base64File
-                        )
-                )
-                : Map.of(
-                        "type", "image",
-                        "source", Map.of(
-                                "type", "base64",
-                                "media_type", mimeType,
-                                "data", base64File
-                        )
-                );
+        Map<String, Object> source = Map.of(
+                "type", "base64",
+                "media_type", mimeType,
+                "data", base64File
+        );
+        Map<String, Object> filePart = Map.of(
+                "type", isPdf(mimeType) ? "document" : "image",
+                "source", source
+        );
 
         Map<String, Object> textPart = Map.of(
                 "type", "text",
@@ -182,7 +173,7 @@ public class ClaudeClient implements ReceiptExtractionService {
             Thread.sleep(millis);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new ExtractionParseException("Retry Interrupted");
+            throw new ExtractionServiceException("Claude API call interrupted during retry backoff");
         }
     }
 }

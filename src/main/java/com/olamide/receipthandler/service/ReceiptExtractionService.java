@@ -2,16 +2,6 @@ package com.olamide.receipthandler.service;
 
 import com.olamide.receipthandler.dto.ExtractionResult;
 
-/**
- * Provider-agnostic contract for pulling structured receipt data out of an
- * uploaded file (image or PDF). Implementations own everything about how
- * they talk to their underlying AI provider — the rest of the app only
- * ever depends on this interface.
- *
- * To add a new provider: implement this interface, then wire it into
- * {@code ExtractionConfig} behind the {@code receipt.extraction.provider}
- * property. Nothing else needs to change.
- */
 public interface ReceiptExtractionService {
 
     /**

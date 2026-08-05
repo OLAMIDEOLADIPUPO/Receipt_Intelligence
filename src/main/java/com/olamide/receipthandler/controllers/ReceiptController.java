@@ -78,15 +78,24 @@ public class ReceiptController {
     @GetMapping
     @Operation(summary = "List receipts (paged)",
             description = "Returns the authenticated user's receipts, newest first, one page at a time. "
+                    + "Optionally filter by month so the table matches the export scope. "
                     + "Walk the pages with `page` and `size`; the response carries `totalElements`, "
                     + "`totalPages`, and `last` so you know when to stop.")
     @ApiResponse(responseCode = "200", description = "Page of receipts returned")
     public ResponseEntity<PagedResponse<ReceiptResponseDTO>> getAllReceipts(
+            @Parameter(description = "Target month as `yyyy-MM` (e.g. 2026-06). Omit to list all receipts.",
+                    example = "2026-06")
+            @RequestParam(required = false) String month,
             @Parameter(description = "Zero-based page number", example = "0")
             @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Receipts per page (1–100; defaults to 20, capped at 100)", example = "20")
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(receiptService.getAllReceipts(page, size));
+
+        YearMonth target = (month != null && !month.isBlank())
+                ? YearMonth.parse(month)
+                : null;
+
+        return ResponseEntity.ok(receiptService.getAllReceipts(target, page, size));
     }
 
     @GetMapping("/summary")

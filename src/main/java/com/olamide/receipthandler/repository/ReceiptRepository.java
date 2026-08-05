@@ -34,6 +34,22 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID> {
             @Param("end") LocalDate end
     );
 
+    // Paged variant used by the receipts list when a month filter is applied.
+    // Matches the export's date-window semantics so the table and the Excel
+    // download cover exactly the same receipts.
+    @Query("""
+        SELECT r FROM Receipt r
+        WHERE r.user = :user
+        AND r.date BETWEEN :start AND :end
+        ORDER BY r.createdAt DESC
+        """)
+    Page<Receipt> findByUserAndDateBetween(
+            @Param("user") User user,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end,
+            Pageable pageable
+    );
+
     List<Receipt> findByStaffOrderByCreatedAtDesc(Staff staff);
 
     @Query("""

@@ -98,6 +98,25 @@ Uploads are processed in the background. **An upload does not return the extract
 
 `ProcessingStatus` values: `PENDING` → `PROCESSING` → `COMPLETED` | `FAILED`.
 
+### Tracking upload completion (do NOT filter the list)
+
+> **Do not** poll `GET /api/receipts` and filter client-side by your tracked IDs. That endpoint is
+> **paginated** (newest-first, `size` default 20 / max 100), so a batch larger than the page size —
+> or IDs that scroll off page 0 as new receipts arrive — will never be found, and paging through the
+> whole list on every tick is wasteful and racy.
+
+**Correct pattern — poll each tracked ID individually:**
+
+1. On upload, collect the returned receipt IDs (single: the `202` body's `id`; batch: every `id` in
+   `accepted[]`) into a "pending" set.
+2. On an interval (e.g. every 2–3 s), call `GET /api/receipts/{id}` for each ID still pending.
+3. When a receipt's `status` is `COMPLETED` or `FAILED`, remove it from the pending set (and render
+   the result / error). Stop polling once the set is empty; apply an overall timeout as a safety net.
+4. The ID is valid the instant you receive it — the row is committed before the upload response
+   returns, so there is no "not yet created" race. Therefore a **`404` is terminal**: it means a
+   wrong/foreign ID, not a timing gap — drop it from the pending set, don't keep retrying.
+
+
 ---
 
 ## 5. Endpoints
@@ -161,9 +180,19 @@ Response (`BatchUploadResponseDTO`):
 ```
 
 #### `GET /api/receipts`  — **paged**
-The authenticated user's receipts, newest first.
-Query: `page` (default 0), `size` (default 20, max 100).
+The authenticated user's receipts, newest first. **Optionally filter by month** so the table matches
+the export scope — pass the same `month` to both endpoints and they return identical receipts.
+
+Query:
+- `month` — **optional** `yyyy-MM` (e.g. `2026-06`). Omit to list all receipts.
+- `page` (default 0), `size` (default 20, max 100).
+
 Returns `PagedResponse<ReceiptResponseDTO>`.
+
+**Recommended workflow for month-filtered export:**
+1. User selects "June 2026" on the frontend.
+2. Table calls `GET /api/receipts?month=2026-06&page=0&size=20` — shows only June receipts, paginated.
+3. Export button calls `GET /api/receipts/export?month=2026-06` — downloads exactly what the user sees.
 
 #### `GET /api/receipts/{id}`
 One receipt by ID (owned by the user), including items and status. Use this to poll after upload.

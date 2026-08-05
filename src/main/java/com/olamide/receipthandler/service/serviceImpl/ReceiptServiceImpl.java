@@ -96,10 +96,19 @@ public class ReceiptServiceImpl implements ReceiptService {
     }
 
     @Override
-    public PagedResponse<ReceiptResponseDTO> getAllReceipts(int page, int size) {
+    public PagedResponse<ReceiptResponseDTO> getAllReceipts(YearMonth month, int page, int size) {
         User currentUser = getCurrentUser();
         Pageable pageable = toPageable(page, size);
-        Page<Receipt> receiptPage = receiptRepository.findByUserOrderByCreatedAtDesc(currentUser, pageable);
+
+        Page<Receipt> receiptPage;
+        if (month != null) {
+            LocalDate start = month.atDay(1);
+            LocalDate end = month.atEndOfMonth();
+            receiptPage = receiptRepository.findByUserAndDateBetween(currentUser, start, end, pageable);
+        } else {
+            receiptPage = receiptRepository.findByUserOrderByCreatedAtDesc(currentUser, pageable);
+        }
+
         List<ReceiptResponseDTO> content = mapReceiptsToDto(receiptPage.getContent());
         return PagedResponse.of(receiptPage, content);
     }
