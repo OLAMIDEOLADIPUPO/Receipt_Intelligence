@@ -16,6 +16,7 @@ public enum Category {
             return Category.OTHER;
         }
         String normalized = category.trim().toUpperCase().replaceAll("[\\s\\-]+", "_");
+
         try {
             return Category.valueOf(normalized);
         } catch (IllegalArgumentException e) {
