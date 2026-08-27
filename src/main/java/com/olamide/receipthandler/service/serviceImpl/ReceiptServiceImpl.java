@@ -5,6 +5,7 @@ import com.olamide.receipthandler.dto.*;
 import com.olamide.receipthandler.enums.Category;
 import com.olamide.receipthandler.exceptions.*;
 import com.olamide.receipthandler.models.*;
+import com.olamide.receipthandler.utilities.ImageResizeUtility;
 import com.olamide.receipthandler.repository.*;
 import com.olamide.receipthandler.service.ReceiptService;
 import com.olamide.receipthandler.service.async.ReceiptAsyncProcessor;
@@ -20,6 +21,8 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import com.olamide.receipthandler.exceptions.AlreadyUploadedException;
 
 @Service
 public class ReceiptServiceImpl implements ReceiptService {
@@ -53,10 +56,11 @@ public class ReceiptServiceImpl implements ReceiptService {
         validateFile(file);
         byte[] fileBytes = readBytes(file);
         String mimeType = file.getContentType();
+        ImageResizeUtility.ResizeResult resized = ImageResizeUtility.resizeIfNeeded(fileBytes, mimeType);
 
         Receipt placeholder = new Receipt(currentUser, DEFAULT_CURRENCY);
         Receipt saved = receiptRepository.save(placeholder);
-        receiptAsyncProcessor.processReceiptAsync(saved.getId(), fileBytes, mimeType);
+        receiptAsyncProcessor.processReceiptAsync(saved.getId(), resized.bytes(), resized.mimeType());
 
         return mapToDto(saved, List.of());
     }
@@ -68,6 +72,31 @@ public class ReceiptServiceImpl implements ReceiptService {
         Staff staff = staffRepository.findById(staffId)
                 .orElseThrow(() -> new IllegalArgumentException("Staff not found: " + staffId));
 
+        return uploadFilesForStaff(currentUser, staff, files);
+    }
+
+    // Public self-upload path (no login). The controller has already resolved
+    // `staff` from the roster via employeeId and passes in the fixed
+    // placeholder system user — everything else is identical to processBatch,
+    // so both delegate to the same private helper rather than duplicating the
+    // per-file accept/reject loop.
+    @Override
+    public BatchUploadResponseDTO processSelfUpload(User systemUser, Staff staff, List<MultipartFile> files) {
+        // Check if this staff member has already uploaded receipts this month
+        YearMonth currentMonth = YearMonth.now();
+        LocalDate start = currentMonth.atDay(1);
+        LocalDate end = currentMonth.atEndOfMonth();
+        
+        if (receiptRepository.existsByStaffAndDateBetween(staff, start, end)) {
+            throw new AlreadyUploadedException(
+                "You have already submitted receipts for this month. Please wait until next month to submit again."
+            );
+        }
+        
+        return uploadFilesForStaff(systemUser, staff, files);
+    }
+
+    private BatchUploadResponseDTO uploadFilesForStaff(User uploadingUser, Staff staff, List<MultipartFile> files) {
         if (files == null || files.isEmpty()) {
             throw new InvalidFileException("No files were uploaded.");
         }
@@ -80,10 +109,11 @@ public class ReceiptServiceImpl implements ReceiptService {
                 validateFile(file);
                 byte[] fileBytes = readBytes(file);
                 String mimeType = file.getContentType();
+                ImageResizeUtility.ResizeResult resized = ImageResizeUtility.resizeIfNeeded(fileBytes, mimeType);
 
-                Receipt placeholder = new Receipt(currentUser, DEFAULT_CURRENCY, staff);
+                Receipt placeholder = new Receipt(uploadingUser, DEFAULT_CURRENCY, staff);
                 Receipt saved = receiptRepository.save(placeholder);
-                receiptAsyncProcessor.processReceiptAsync(saved.getId(), fileBytes, mimeType);
+                receiptAsyncProcessor.processReceiptAsync(saved.getId(), resized.bytes(), resized.mimeType());
 
                 accepted.add(mapToDto(saved, List.of()));
             } catch (InvalidFileException e) {
@@ -97,16 +127,19 @@ public class ReceiptServiceImpl implements ReceiptService {
 
     @Override
     public PagedResponse<ReceiptResponseDTO> getAllReceipts(YearMonth month, int page, int size) {
-        User currentUser = getCurrentUser();
         Pageable pageable = toPageable(page, size);
 
+        // Review path: Accounts sees every receipt company-wide, no matter who
+        // uploaded it (logged-in Accounts user, batch flow, or the public
+        // self-upload flow whose receipts attach to the placeholder system
+        // user). No User filter here.
         Page<Receipt> receiptPage;
         if (month != null) {
             LocalDate start = month.atDay(1);
             LocalDate end = month.atEndOfMonth();
-            receiptPage = receiptRepository.findByUserAndDateBetween(currentUser, start, end, pageable);
+            receiptPage = receiptRepository.findByDateBetween(start, end, pageable);
         } else {
-            receiptPage = receiptRepository.findByUserOrderByCreatedAtDesc(currentUser, pageable);
+            receiptPage = receiptRepository.findAllByOrderByCreatedAtDesc(pageable);
         }
 
         List<ReceiptResponseDTO> content = mapReceiptsToDto(receiptPage.getContent());
@@ -115,13 +148,14 @@ public class ReceiptServiceImpl implements ReceiptService {
 
     @Override
     public SpendingSummary getSpendingSummary(YearMonth yearMonth) {
-        User currentUser = getCurrentUser();
-
+        // Company-wide summary — same reasoning as getAllReceipts: the whole
+        // point of the Accounts review/export role is to see every staff
+        // member's spend, including self-uploaded receipts.
         LocalDate start = yearMonth.atDay(1);
         LocalDate end = yearMonth.atEndOfMonth();
 
         List<Receipt> receiptsThisMonth = receiptRepository
-                .findByUserAndDateBetween(currentUser, start, end);
+                .findByDateBetween(start, end);
 
         List<UUID> receiptIds = receiptsThisMonth.stream()
                 .map(Receipt::getId)
@@ -153,7 +187,7 @@ public class ReceiptServiceImpl implements ReceiptService {
 
         String period = yearMonth.getMonth().toString() + " " + yearMonth.getYear();
 
-        List<Receipt> receiptsWithNoDate = receiptRepository.findByUserAndDateIsNull(currentUser);
+        List<Receipt> receiptsWithNoDate = receiptRepository.findByDateIsNull();
         BigDecimal unknownDateTotal = receiptsWithNoDate.stream()
                 .map(Receipt::getTotalAmount)
                 .filter(Objects::nonNull)
@@ -166,9 +200,10 @@ public class ReceiptServiceImpl implements ReceiptService {
 
     @Override
     public ReceiptResponseDTO getReceiptById(UUID id) {
-        User currentUser = getCurrentUser();
-
-        Receipt receipt = receiptRepository.findByIdAndUser(id, currentUser)
+        // Company-wide like the other read paths: a receipt that shows up in
+        // the review list must be openable even if it was self-uploaded and
+        // therefore belongs to the placeholder system user.
+        Receipt receipt = receiptRepository.findById(id)
                 .orElseThrow(() -> new ReceiptNotFoundException("No receipt with this id"));
 
         List<ReceiptItem> items = receiptItemRepository.findByReceiptId(id);
@@ -177,10 +212,10 @@ public class ReceiptServiceImpl implements ReceiptService {
 
     @Override
     public PagedResponse<ReceiptItemWithContextDTO> getItemsByCategory(Category category, int page, int size) {
-        User currentUser = getCurrentUser();
+        // Company-wide — items across every staff member's receipts.
         Pageable pageable = toPageable(page, size);
 
-        Page<ReceiptItem> itemPage = receiptItemRepository.findByUserAndCategory(currentUser, category, pageable);
+        Page<ReceiptItem> itemPage = receiptItemRepository.findByCategory(category, pageable);
 
         List<ReceiptItemWithContextDTO> content = itemPage.getContent().stream()
                 .map(item -> new ReceiptItemWithContextDTO(

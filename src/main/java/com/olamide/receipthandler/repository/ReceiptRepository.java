@@ -3,7 +3,6 @@ package com.olamide.receipthandler.repository;
 import com.olamide.receipthandler.enums.ProcessingStatus;
 import com.olamide.receipthandler.models.Receipt;
 import com.olamide.receipthandler.models.Staff;
-import com.olamide.receipthandler.models.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -18,18 +17,26 @@ import java.util.UUID;
 
 public interface ReceiptRepository extends JpaRepository<Receipt, UUID> {
 
-    List<Receipt> findByUserAndDateIsNull(User user);
-    Page<Receipt> findByUserOrderByCreatedAtDesc(User user, Pageable pageable);
-    Optional<Receipt> findByIdAndUser(UUID id, User user);
+    // These read paths are intentionally NOT scoped to a User: Accounts uses
+    // them to review/export every staff member's receipts company-wide,
+    // regardless of whether a receipt was uploaded by a logged-in Accounts
+    // user or via the public staff self-upload flow (which attaches to the
+    // fixed placeholder system user).
+
+    // Receipts with no extracted date — used by the spending summary's
+    // "unknown date" bucket.
+    List<Receipt> findByDateIsNull();
+
+    // Newest-first page of every receipt — used by the receipts list when no
+    // month filter is applied.
+    Page<Receipt> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
     @Query("""
         SELECT r FROM Receipt r
-        WHERE r.user = :user
-        AND r.date BETWEEN :start AND :end
+        WHERE r.date BETWEEN :start AND :end
         ORDER BY r.createdAt DESC
         """)
-    List<Receipt> findByUserAndDateBetween(
-            @Param("user") User user,
+    List<Receipt> findByDateBetween(
             @Param("start") LocalDate start,
             @Param("end") LocalDate end
     );
@@ -39,12 +46,10 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID> {
     // download cover exactly the same receipts.
     @Query("""
         SELECT r FROM Receipt r
-        WHERE r.user = :user
-        AND r.date BETWEEN :start AND :end
+        WHERE r.date BETWEEN :start AND :end
         ORDER BY r.createdAt DESC
         """)
-    Page<Receipt> findByUserAndDateBetween(
-            @Param("user") User user,
+    Page<Receipt> findByDateBetween(
             @Param("start") LocalDate start,
             @Param("end") LocalDate end,
             Pageable pageable
@@ -67,14 +72,27 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID> {
     @Query("""
     SELECT r FROM Receipt r
     LEFT JOIN FETCH r.staff s
-    WHERE r.user = :user
-    AND r.status = :status
+    WHERE r.status = :status
     AND r.date BETWEEN :start AND :end
     ORDER BY s.name ASC NULLS LAST, r.date ASC
     """)
     List<Receipt> findForExport(
-            @Param("user") User user,
             @Param("status") ProcessingStatus status,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end
+    );
+
+    /**
+     * Check if a staff member has already uploaded receipts for a given month.
+     * Used by the self-upload endpoint to prevent duplicate monthly submissions.
+     */
+    @Query("""
+        SELECT COUNT(r) > 0 FROM Receipt r
+        WHERE r.staff = :staff
+        AND r.date BETWEEN :start AND :end
+        """)
+    boolean existsByStaffAndDateBetween(
+            @Param("staff") Staff staff,
             @Param("start") LocalDate start,
             @Param("end") LocalDate end
     );

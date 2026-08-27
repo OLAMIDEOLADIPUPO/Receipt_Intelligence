@@ -9,9 +9,10 @@ import java.util.UUID;
 public record StaffResponseDTO(
         @Schema(description = "Staff ID") UUID id,
         @Schema(description = "Staff member's full name", example = "Yesirat Bello") String name,
+        @Schema(description = "Unique employee ID — used by staff to self-identify on the public upload page", example = "REM-0142") String employeeId,
         @Schema(description = "Whether the staff member is active", example = "true") boolean active
 ) {
     public static StaffResponseDTO from(Staff staff) {
-        return new StaffResponseDTO(staff.getId(), staff.getName(), staff.isActive());
+        return new StaffResponseDTO(staff.getId(), staff.getName(), staff.getEmployeeId(), staff.isActive());
     }
 }

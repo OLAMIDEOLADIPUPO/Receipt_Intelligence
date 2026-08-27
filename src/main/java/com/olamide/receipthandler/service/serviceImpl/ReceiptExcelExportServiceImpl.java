@@ -1,12 +1,10 @@
 package com.olamide.receipthandler.service.serviceImpl;
 
-import com.olamide.receipthandler.configurations.SecurityUtils;
 import com.olamide.receipthandler.dto.ExcelExportResult;
 import com.olamide.receipthandler.enums.ProcessingStatus;
 import com.olamide.receipthandler.exceptions.ExcelExportException;
 import com.olamide.receipthandler.models.Receipt;
 import com.olamide.receipthandler.models.ReceiptItem;
-import com.olamide.receipthandler.models.User;
 import com.olamide.receipthandler.repository.ReceiptItemRepository;
 import com.olamide.receipthandler.repository.ReceiptRepository;
 import com.olamide.receipthandler.service.ReceiptExcelExportService;
@@ -44,13 +42,14 @@ public class ReceiptExcelExportServiceImpl implements ReceiptExcelExportService 
 
     @Override
     public ExcelExportResult exportMonth(YearMonth month) {
-        User currentUser = SecurityUtils.getAuthenticatedUser();
-
+        // Company-wide export — Accounts' report covers every staff member's
+        // completed receipts, including ones uploaded via the public
+        // self-upload flow (which attach to the placeholder system user).
         LocalDate start = month.atDay(1);
         LocalDate end = month.atEndOfMonth();
 
         List<Receipt> receipts = receiptRepository.findForExport(
-                currentUser, ProcessingStatus.COMPLETED, start, end);
+                ProcessingStatus.COMPLETED, start, end);
 
         List<UUID> receiptIds = receipts.stream().map(Receipt::getId).toList();
         Map<UUID, List<ReceiptItem>> itemsByReceipt = receiptIds.isEmpty()

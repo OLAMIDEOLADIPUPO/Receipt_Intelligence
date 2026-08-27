@@ -125,5 +125,24 @@ public class GlobalExceptionHandler {
         );
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
     }
+    @ExceptionHandler(UnknownEmployeeIdException.class)
+    public ResponseEntity<ErrorResponse> handleUnknownEmployeeId(UnknownEmployeeIdException e) {
+        ErrorResponse error = new ErrorResponse(
+                "UNKNOWN_EMPLOYEE_ID",
+                e.getMessage(),
+                LocalDateTime.now()
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
+    @ExceptionHandler(AlreadyUploadedException.class)
+    public ResponseEntity<ErrorResponse> handleAlreadyUploaded(AlreadyUploadedException e) {
+        ErrorResponse error = new ErrorResponse(
+                "ALREADY_UPLOADED_THIS_MONTH",
+                e.getMessage(),
+                LocalDateTime.now()
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
 
 }

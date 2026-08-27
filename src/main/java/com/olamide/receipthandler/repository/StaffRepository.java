@@ -11,4 +11,7 @@ public interface StaffRepository extends JpaRepository<Staff, UUID> {
     List<Staff> findByActiveTrueAndNameContainingIgnoreCase(String name);
     List<Staff> findByActiveTrue();
     Optional<Staff> findByActiveTrueAndNameIgnoreCase(String name);
+
+
+    Optional<Staff> findByActiveTrueAndEmployeeIdIgnoreCase(String employeeId);
 }

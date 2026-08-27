@@ -43,6 +43,18 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**", "/actuator/health").permitAll()
                         // OpenAPI spec + Swagger UI must be reachable without a token.
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        // Public staff self-upload — no login. Identity comes from the
+                        // employeeId roster check in StaffIdentityResolver, not a JWT.
+                        // Deliberately scoped to POST only: no other verb on this path
+                        // should ever be open.
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/receipts/self-upload").permitAll()
+                        // The servlet container's error dispatch must stay reachable so
+                        // real error statuses (e.g. 400 for a malformed/missing-file
+                        // request) reach the client instead of being rewritten to 403.
+                        // The stateless JWT setup cannot restore a SecurityContext on
+                        // the /error forward, so without this every unhandled
+                        // exception came back as a bare Forbidden.
+                        .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session

@@ -1,8 +1,11 @@
 package com.olamide.receipthandler.controllers;
 
+import com.olamide.receipthandler.components.StaffIdentityResolver;
 import com.olamide.receipthandler.dto.*;
 import com.olamide.receipthandler.enums.Category;
 import com.olamide.receipthandler.exceptions.ErrorResponse;
+import com.olamide.receipthandler.models.Staff;
+import com.olamide.receipthandler.models.User;
 import com.olamide.receipthandler.service.ReceiptExcelExportService;
 import com.olamide.receipthandler.service.ReceiptService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -25,14 +28,18 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("api/receipts")
-@Tag(name = "Receipts", description = "Upload receipts for AI extraction, browse them, and report on spending. Requires a Bearer access token.")
+@Tag(name = "Receipts", description = "Upload receipts for AI extraction, browse them, and report on spending. Requires a Bearer access token, except /self-upload which is public.")
 public class ReceiptController {
     private final ReceiptService receiptService;
     private final ReceiptExcelExportService receiptExcelExportService;
+    private final StaffIdentityResolver staffIdentityResolver;
 
-    public ReceiptController(ReceiptService receiptService, ReceiptExcelExportService receiptExcelExportService) {
+    public ReceiptController(ReceiptService receiptService,
+                             ReceiptExcelExportService receiptExcelExportService,
+                             StaffIdentityResolver staffIdentityResolver) {
         this.receiptService = receiptService;
         this.receiptExcelExportService = receiptExcelExportService;
+        this.staffIdentityResolver = staffIdentityResolver;
     }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -75,10 +82,49 @@ public class ReceiptController {
                 .body(receiptService.processBatch(staffId, files));
     }
 
+    @PostMapping(value = "/self-upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(
+            summary = "Staff self-upload (public, no login)",
+            description = "A staff member submits their own receipts directly, identifying themselves by "
+                    + "employeeId (validated against the roster) plus firstName/lastName (a soft check only — "
+                    + "a mismatch is logged, not rejected). No Bearer token required. Behaves identically to "
+                    + "the Accounts-facing batch upload otherwise: each file is validated and queued "
+                    + "independently for AI extraction.",
+            security = {}
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "202", description = "Batch accepted; see body for per-file outcomes"),
+            @ApiResponse(responseCode = "400", description = "No files supplied",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "employeeId not recognized on the roster",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Employee has already submitted receipts this month",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<BatchUploadResponseDTO> selfUpload(
+            @Parameter(description = "Staff member's first name") @RequestParam("firstName") String firstName,
+            @Parameter(description = "Staff member's last name") @RequestParam("lastName") String lastName,
+            @Parameter(description = "Employee ID — must match an existing roster entry") @RequestParam("employeeId") String employeeId,
+            @Parameter(description = "One or more receipt files (JPEG, PNG, WEBP, or PDF; max 5 MB each)")
+            @RequestParam(value = "files", required = false) List<MultipartFile> files) {
+
+        // `files` is optional at the binding level so a request with no file parts
+        // reaches the service's own guard instead of failing in Spring's argument
+        // resolution (which would go through the /error dispatch). The service
+        // throws InvalidFileException -> 400 "No files were uploaded." per contract.
+        Staff staff = staffIdentityResolver.resolveStaff(firstName, lastName, employeeId);
+        User systemUser = staffIdentityResolver.resolveSystemUser();
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(receiptService.processSelfUpload(systemUser, staff, files));
+    }
+
     @GetMapping
-    @Operation(summary = "List receipts (paged)",
-            description = "Returns the authenticated user's receipts, newest first, one page at a time. "
-                    + "Optionally filter by month so the table matches the export scope. "
+    @Operation(
+            summary = "List all receipts (paged)",
+            description = "Returns all receipts company-wide, newest first, one page at a time — every staff "
+                    + "member's, regardless of upload source (Accounts batch upload or public staff "
+                    + "self-upload). Optionally filter by month so the table matches the export scope. "
                     + "Walk the pages with `page` and `size`; the response carries `totalElements`, "
                     + "`totalPages`, and `last` so you know when to stop.")
     @ApiResponse(responseCode = "200", description = "Page of receipts returned")
@@ -117,11 +163,12 @@ public class ReceiptController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get a receipt by ID",
-            description = "Fetches a single receipt owned by the authenticated user, including its extracted items "
-                    + "and current processing status.")
+            description = "Fetches a single receipt by ID, including its extracted items and current processing "
+                    + "status. Receipts are visible company-wide to any authenticated user, no matter "
+                    + "who uploaded them.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Receipt found"),
-            @ApiResponse(responseCode = "404", description = "No receipt with this ID for the current user",
+            @ApiResponse(responseCode = "404", description = "No receipt with this ID",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<ReceiptResponseDTO> getReceiptById(
@@ -129,14 +176,14 @@ public class ReceiptController {
         return ResponseEntity.ok(receiptService.getReceiptById(id));
     }
 
-    // Answers "what did I spend on category X", independent of which
-    // receipts it came from — distinct from GET /api/receipts, which
+    // Answers "what was spent on category X" company-wide, independent of
+    // which receipts it came from — distinct from GET /api/receipts, which
     // always returns whole receipts.
     @GetMapping("/items")
     @Operation(summary = "List items in a category (paged)",
             description = "Returns individual line items across all receipts for the given category, newest first, "
-                    + "each carrying its parent receipt's merchant and date. Answers \"what did I spend on X\" "
-                    + "regardless of which receipt each item came from. Walk the pages with `page` and `size`.")
+                    + "each carrying its parent receipt's merchant and date. Answers \"what was spent on X\" "
+                    + "company-wide, regardless of which receipt each item came from. Walk the pages with `page` and `size`.")
     @ApiResponse(responseCode = "200", description = "Page of items returned")
     public ResponseEntity<PagedResponse<ReceiptItemWithContextDTO>> getItemsByCategory(
             @Parameter(description = "Spending category to filter items by")
