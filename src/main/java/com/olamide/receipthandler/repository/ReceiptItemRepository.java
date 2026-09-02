@@ -16,12 +16,7 @@ public interface ReceiptItemRepository extends JpaRepository<ReceiptItem, UUID> 
     List<ReceiptItem> findByReceiptId(UUID receiptId);
     List<ReceiptItem> findByReceiptIdIn(List<UUID> receiptIds);
 
-    // Items in the given category across ALL receipts, newest receipt first.
-    // Deliberately not scoped to a User — Accounts reviews spending
-    // company-wide, including receipts from the public staff self-upload flow.
-    // JOIN FETCH is a to-one fetch (item -> receipt), so it pages safely in the DB
-    // with no in-memory-paging penalty. countQuery is supplied explicitly because
-    // Hibernate can't derive a count from a fetch-join query.
+
     @Query(value = """
         SELECT i FROM ReceiptItem i
         JOIN FETCH i.receipt r

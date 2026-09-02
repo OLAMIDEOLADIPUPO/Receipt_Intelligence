@@ -31,10 +31,6 @@ public class Receipt {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    // Nullable — existing receipts predate staff tracking, and the current
-    // single-file upload path (ReceiptServiceImpl.processReceipt) doesn't
-    // collect a staff member yet. Task 5's batch upload endpoint is what
-    // will start populating this on every new receipt going forward.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "staff_id", nullable = true)
     private Staff staff;

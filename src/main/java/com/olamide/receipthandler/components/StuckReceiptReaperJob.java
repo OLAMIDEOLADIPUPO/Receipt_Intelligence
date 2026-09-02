@@ -21,9 +21,7 @@ public class StuckReceiptReaperJob {
 
     private final ReceiptRepository receiptRepository;
 
-    // A receipt normally reaches a terminal status in seconds. Anything still
-    // PROCESSING after this long is treated as abandoned and failed. Configured
-    // via app.jobs.stuck-receipt-reaper.stuck-after in application.yaml.
+
     private final Duration stuckAfter;
 
     public StuckReceiptReaperJob(ReceiptRepository receiptRepository,

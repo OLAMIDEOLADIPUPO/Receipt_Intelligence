@@ -12,8 +12,6 @@ public interface StaffService {
 
     Staff findOrCreate(String name, String employeeId);
 
-    // Used by StaffIdentityResolver to validate a public self-upload
-    // submission's employeeId against the roster. Empty if unrecognized.
     Optional<Staff> findByEmployeeId(String employeeId);
 
     void deactivate(UUID staffId);

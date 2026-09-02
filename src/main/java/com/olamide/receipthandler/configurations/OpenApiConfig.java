@@ -9,18 +9,7 @@ import io.swagger.v3.oas.annotations.security.SecurityScheme;
 import io.swagger.v3.oas.annotations.servers.Server;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * OpenAPI / Swagger metadata for the whole API.
- *
- * The document is served at {@code /v3/api-docs} and the interactive UI at
- * {@code /swagger-ui.html}. Both paths are opened up in {@link SecurityConfig}
- * so the docs are reachable without a token.
- *
- * <p>A single {@code bearer-jwt} security scheme is declared here and applied
- * to every operation via the top-level {@link SecurityRequirement}. The public
- * auth endpoints opt out individually with {@code @Operation(security = {})},
- * so Swagger's "Authorize" lock shows only where a token is actually required.
- */
+
 @Configuration
 @OpenAPIDefinition(
         info = @Info(

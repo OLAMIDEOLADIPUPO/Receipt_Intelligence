@@ -28,11 +28,7 @@ public class StaffIdentityResolver {
         this.userRepository = userRepository;
     }
 
-    // Validates employeeId against the roster. Throws if unrecognized — that's
-    // a hard gate. firstName/lastName are a soft check only: a mismatch is
-    // logged for visibility but never blocks the upload, since employeeId is
-    // the real key and a name typo shouldn't lock someone out of submitting
-    // their receipts for the month.
+
     public Staff resolveStaff(String firstName, String lastName, String employeeId) {
         Staff staff = staffService.findByEmployeeId(employeeId)
                 .orElseThrow(() -> new UnknownEmployeeIdException(
