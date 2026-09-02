@@ -78,12 +78,9 @@ public class GeminiClient implements ReceiptExtractionService {
                 sleep(backoffMs);
                 backoffMs *= 2;
             } catch (HttpClientErrorException e) {
-                // Any other 4xx - bad request, invalid key, etc. Not transient, don't retry.
                 throw new ExtractionServiceException("Gemini API rejected the request (HTTP " + e.getStatusCode() + ")");
             } catch (Exception e) {
                 // Network-level failure (timeout, connection reset, etc.) - worth one retry.
-                // Never include e.getMessage() here: for I/O errors it embeds the full
-                // request URI, and this message is persisted and returned to the client.
                 if (attempt == MAX_RETRIES) {
                     throw new ExtractionServiceException("Gemini API call failed after " + MAX_RETRIES + " retries");
                 }

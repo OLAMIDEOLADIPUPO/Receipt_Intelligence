@@ -1,12 +1,6 @@
 package com.olamide.receipthandler.service;
 
-/**
- * Single source of truth for the receipt-parsing instructions sent to
- * whichever AI provider is active. Every {@code ReceiptExtractionService}
- * implementation should use this exact prompt — the 8 fixed categories
- * here must stay in sync with {@code com.olamide.receipthandler.enums.Category}.
- * If you add/rename a category, update both places.
- */
+
 public final class ReceiptExtractionPrompt {
 
     private ReceiptExtractionPrompt() {}

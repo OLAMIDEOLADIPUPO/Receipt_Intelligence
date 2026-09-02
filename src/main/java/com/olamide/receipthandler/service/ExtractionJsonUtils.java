@@ -5,10 +5,10 @@ import com.olamide.receipthandler.exceptions.ExtractionParseException;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Shared defensive-parsing logic for turning a raw AI provider text response
- * into {@link ExtractedReceiptData}. Every provider is prompted to return
+ * This is a  defensive-parsing logic for turning the raw output of the used AI provider
+ * into {@link ExtractedReceiptData}. The
  * bare JSON, but models occasionally wrap it in markdown backticks or add
- * a stray sentence before/after — this cleans both cases the same way for
+ * a stray sentence before/after ,so this cleans both cases the same way for
  * every provider, so a fix here benefits all of them at once.
  */
 public final class ExtractionJsonUtils {
