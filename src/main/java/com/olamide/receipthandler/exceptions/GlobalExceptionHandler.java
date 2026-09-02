@@ -145,4 +145,24 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
 
+    @ExceptionHandler(UploadWindowClosedException.class)
+    public ResponseEntity<ErrorResponse> handleUploadWindowClosed(UploadWindowClosedException e) {
+        ErrorResponse error = new ErrorResponse(
+                "UPLOAD_WINDOW_CLOSED",
+                e.getMessage(),
+                LocalDateTime.now()
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
+    @ExceptionHandler(TooManyLoginAttemptsException.class)
+    public ResponseEntity<ErrorResponse> handleTooManyLoginAttempts(TooManyLoginAttemptsException e) {
+        ErrorResponse error = new ErrorResponse(
+                "TOO_MANY_LOGIN_ATTEMPTS",
+                e.getMessage(),
+                LocalDateTime.now()
+        );
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(error);
+    }
+
 }

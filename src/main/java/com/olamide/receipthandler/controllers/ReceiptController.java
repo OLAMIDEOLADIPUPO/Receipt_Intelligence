@@ -124,11 +124,15 @@ public class ReceiptController {
             summary = "List all receipts (paged)",
             description = "Returns all receipts company-wide, newest first, one page at a time — every staff "
                     + "member's, regardless of upload source (Accounts batch upload or public staff "
-                    + "self-upload). Optionally filter by month so the table matches the export scope. "
-                    + "Walk the pages with `page` and `size`; the response carries `totalElements`, "
-                    + "`totalPages`, and `last` so you know when to stop.")
+                    + "self-upload). Optionally filter by month so the table matches the export scope, and/or "
+                    + "by category — a receipt matches the category filter if any of its line items is in "
+                    + "that category. Walk the pages with `page` and `size`; the response carries "
+                    + "`totalElements`, `totalPages`, and `last` so you know when to stop.")
     @ApiResponse(responseCode = "200", description = "Page of receipts returned")
     public ResponseEntity<PagedResponse<ReceiptResponseDTO>> getAllReceipts(
+            @Parameter(description = "Spending category to filter by — matches receipts with at least one "
+                    + "item in this category. Omit to include every category.")
+            @RequestParam(required = false) Category category,
             @Parameter(description = "Target month as `yyyy-MM` (e.g. 2026-06). Omit to list all receipts.",
                     example = "2026-06")
             @RequestParam(required = false) String month,
@@ -141,7 +145,7 @@ public class ReceiptController {
                 ? YearMonth.parse(month)
                 : null;
 
-        return ResponseEntity.ok(receiptService.getAllReceipts(target, page, size));
+        return ResponseEntity.ok(receiptService.getAllReceipts(category, target, page, size));
     }
 
     @GetMapping("/summary")

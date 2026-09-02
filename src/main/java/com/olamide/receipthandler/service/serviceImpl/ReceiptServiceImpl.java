@@ -8,6 +8,7 @@ import com.olamide.receipthandler.models.*;
 import com.olamide.receipthandler.utilities.ImageResizeUtility;
 import com.olamide.receipthandler.repository.*;
 import com.olamide.receipthandler.service.ReceiptService;
+import com.olamide.receipthandler.service.UploadWindowService;
 import com.olamide.receipthandler.service.async.ReceiptAsyncProcessor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -17,8 +18,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -31,6 +34,7 @@ public class ReceiptServiceImpl implements ReceiptService {
     private final ReceiptItemRepository receiptItemRepository;
     private final ReceiptAsyncProcessor receiptAsyncProcessor;
     private final StaffRepository staffRepository;
+    private final UploadWindowService uploadWindowService;
 
     private static final Set<String> ALLOWED_MIME_TYPES = Set.of(
             "image/jpeg", "image/png", "image/webp", "application/pdf"
@@ -42,11 +46,13 @@ public class ReceiptServiceImpl implements ReceiptService {
     public ReceiptServiceImpl(ReceiptRepository receiptRepository,
                               ReceiptItemRepository receiptItemRepository,
                               ReceiptAsyncProcessor receiptAsyncProcessor,
-                              StaffRepository staffRepository) {
+                              StaffRepository staffRepository,
+                              UploadWindowService uploadWindowService) {
         this.receiptRepository = receiptRepository;
         this.receiptItemRepository = receiptItemRepository;
         this.receiptAsyncProcessor = receiptAsyncProcessor;
         this.staffRepository = staffRepository;
+        this.uploadWindowService = uploadWindowService;
     }
 
     @Override
@@ -75,24 +81,25 @@ public class ReceiptServiceImpl implements ReceiptService {
         return uploadFilesForStaff(currentUser, staff, files);
     }
 
-    // Public self-upload path (no login). The controller has already resolved
-    // `staff` from the roster via employeeId and passes in the fixed
-    // placeholder system user — everything else is identical to processBatch,
-    // so both delegate to the same private helper rather than duplicating the
-    // per-file accept/reject loop.
+
     @Override
     public BatchUploadResponseDTO processSelfUpload(User systemUser, Staff staff, List<MultipartFile> files) {
-        // Check if this staff member has already uploaded receipts this month
+        if (!uploadWindowService.isOpenNow()) {
+            throw new UploadWindowClosedException(
+                "Receipt submissions aren't open right now. Please check back during the submission window."
+            );
+        }
+
         YearMonth currentMonth = YearMonth.now();
-        LocalDate start = currentMonth.atDay(1);
-        LocalDate end = currentMonth.atEndOfMonth();
-        
-        if (receiptRepository.existsByStaffAndDateBetween(staff, start, end)) {
+        Instant start = currentMonth.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant();
+        Instant end = currentMonth.plusMonths(1).atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant();
+
+        if (receiptRepository.existsByStaffAndCreatedAtBetween(staff, start, end)) {
             throw new AlreadyUploadedException(
                 "You have already submitted receipts for this month. Please wait until next month to submit again."
             );
         }
-        
+
         return uploadFilesForStaff(systemUser, staff, files);
     }
 
@@ -126,15 +133,18 @@ public class ReceiptServiceImpl implements ReceiptService {
     }
 
     @Override
-    public PagedResponse<ReceiptResponseDTO> getAllReceipts(YearMonth month, int page, int size) {
+    public PagedResponse<ReceiptResponseDTO> getAllReceipts(Category category, YearMonth month, int page, int size) {
         Pageable pageable = toPageable(page, size);
 
-        // Review path: Accounts sees every receipt company-wide, no matter who
-        // uploaded it (logged-in Accounts user, batch flow, or the public
-        // self-upload flow whose receipts attach to the placeholder system
-        // user). No User filter here.
+
         Page<Receipt> receiptPage;
-        if (month != null) {
+        if (category != null && month != null) {
+            LocalDate start = month.atDay(1);
+            LocalDate end = month.atEndOfMonth();
+            receiptPage = receiptRepository.findByItemsCategoryAndDateBetween(category, start, end, pageable);
+        } else if (category != null) {
+            receiptPage = receiptRepository.findByItemsCategory(category, pageable);
+        } else if (month != null) {
             LocalDate start = month.atDay(1);
             LocalDate end = month.atEndOfMonth();
             receiptPage = receiptRepository.findByDateBetween(start, end, pageable);
@@ -148,9 +158,7 @@ public class ReceiptServiceImpl implements ReceiptService {
 
     @Override
     public SpendingSummary getSpendingSummary(YearMonth yearMonth) {
-        // Company-wide summary — same reasoning as getAllReceipts: the whole
-        // point of the Accounts review/export role is to see every staff
-        // member's spend, including self-uploaded receipts.
+
         LocalDate start = yearMonth.atDay(1);
         LocalDate end = yearMonth.atEndOfMonth();
 
@@ -200,9 +208,7 @@ public class ReceiptServiceImpl implements ReceiptService {
 
     @Override
     public ReceiptResponseDTO getReceiptById(UUID id) {
-        // Company-wide like the other read paths: a receipt that shows up in
-        // the review list must be openable even if it was self-uploaded and
-        // therefore belongs to the placeholder system user.
+
         Receipt receipt = receiptRepository.findById(id)
                 .orElseThrow(() -> new ReceiptNotFoundException("No receipt with this id"));
 
@@ -212,7 +218,6 @@ public class ReceiptServiceImpl implements ReceiptService {
 
     @Override
     public PagedResponse<ReceiptItemWithContextDTO> getItemsByCategory(Category category, int page, int size) {
-        // Company-wide — items across every staff member's receipts.
         Pageable pageable = toPageable(page, size);
 
         Page<ReceiptItem> itemPage = receiptItemRepository.findByCategory(category, pageable);
@@ -291,10 +296,7 @@ public class ReceiptServiceImpl implements ReceiptService {
         }
     }
 
-    // Turns raw page/size request params into a safe Pageable: negative pages
-    // become 0, non-positive sizes fall back to the default, and oversized
-    // requests are capped so a caller can't pull the whole table in one page.
-    // No Sort is attached — ordering is owned by the repository queries.
+
     private Pageable toPageable(int page, int size) {
         int safePage = Math.max(page, 0);
         int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);

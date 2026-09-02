@@ -1,5 +1,6 @@
 package com.olamide.receipthandler.repository;
 
+import com.olamide.receipthandler.enums.Category;
 import com.olamide.receipthandler.enums.ProcessingStatus;
 import com.olamide.receipthandler.models.Receipt;
 import com.olamide.receipthandler.models.Staff;
@@ -16,19 +17,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface ReceiptRepository extends JpaRepository<Receipt, UUID> {
-
-    // These read paths are intentionally NOT scoped to a User: Accounts uses
-    // them to review/export every staff member's receipts company-wide,
-    // regardless of whether a receipt was uploaded by a logged-in Accounts
-    // user or via the public staff self-upload flow (which attaches to the
-    // fixed placeholder system user).
-
-    // Receipts with no extracted date — used by the spending summary's
-    // "unknown date" bucket.
     List<Receipt> findByDateIsNull();
 
-    // Newest-first page of every receipt — used by the receipts list when no
-    // month filter is applied.
     Page<Receipt> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
     @Query("""
@@ -50,6 +40,43 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID> {
         ORDER BY r.createdAt DESC
         """)
     Page<Receipt> findByDateBetween(
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end,
+            Pageable pageable
+    );
+
+
+    @Query(value = """
+        SELECT DISTINCT r FROM Receipt r
+        JOIN r.items i
+        WHERE i.category = :category
+        ORDER BY r.createdAt DESC
+        """,
+        countQuery = """
+        SELECT COUNT(DISTINCT r) FROM Receipt r
+        JOIN r.items i
+        WHERE i.category = :category
+        """)
+    Page<Receipt> findByItemsCategory(
+            @Param("category") Category category,
+            Pageable pageable
+    );
+
+    @Query(value = """
+        SELECT DISTINCT r FROM Receipt r
+        JOIN r.items i
+        WHERE i.category = :category
+        AND r.date BETWEEN :start AND :end
+        ORDER BY r.createdAt DESC
+        """,
+        countQuery = """
+        SELECT COUNT(DISTINCT r) FROM Receipt r
+        JOIN r.items i
+        WHERE i.category = :category
+        AND r.date BETWEEN :start AND :end
+        """)
+    Page<Receipt> findByItemsCategoryAndDateBetween(
+            @Param("category") Category category,
             @Param("start") LocalDate start,
             @Param("end") LocalDate end,
             Pageable pageable
@@ -83,24 +110,23 @@ public interface ReceiptRepository extends JpaRepository<Receipt, UUID> {
     );
 
     /**
-     * Check if a staff member has already uploaded receipts for a given month.
-     * Used by the self-upload endpoint to prevent duplicate monthly submissions.
+     * Check if a staff member has already submitted receipts within a given
+     * window. Used by the self-upload endpoint to prevent duplicate monthly
+     * submissions
      */
     @Query("""
         SELECT COUNT(r) > 0 FROM Receipt r
         WHERE r.staff = :staff
-        AND r.date BETWEEN :start AND :end
+        AND r.createdAt >= :start
+        AND r.createdAt < :end
         """)
-    boolean existsByStaffAndDateBetween(
+    boolean existsByStaffAndCreatedAtBetween(
             @Param("staff") Staff staff,
-            @Param("start") LocalDate start,
-            @Param("end") LocalDate end
+            @Param("start") Instant start,
+            @Param("end") Instant end
     );
 
-    // Rows stuck mid-processing: still PROCESSING but their last write is older
-    // than the cutoff. updatedAt marks when the PROCESSING transition was
-    // persisted; for rows that predate the updatedAt column it's null, so we
-    // fall back to createdAt. Either timestamp older than the cutoff => stuck.
+
     @Query("""
         SELECT r FROM Receipt r
         WHERE r.status = :status

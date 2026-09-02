@@ -48,6 +48,9 @@ public class SecurityConfig {
                         // Deliberately scoped to POST only: no other verb on this path
                         // should ever be open.
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/receipts/self-upload").permitAll()
+                        // The /upload page checks this before rendering the form — must be
+                        // readable with no token. Setting the override (PUT) still requires auth.
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/upload-window").permitAll()
                         // The servlet container's error dispatch must stay reachable so
                         // real error statuses (e.g. 400 for a malformed/missing-file
                         // request) reach the client instead of being rewritten to 403.
