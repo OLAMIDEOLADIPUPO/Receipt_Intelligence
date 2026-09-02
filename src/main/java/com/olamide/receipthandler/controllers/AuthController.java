@@ -1,10 +1,12 @@
 package com.olamide.receipthandler.controllers;
 
+import com.olamide.receipthandler.components.LoginRateLimiter;
 import com.olamide.receipthandler.configurations.RefreshTokenCookieFactory;
 import com.olamide.receipthandler.dto.AuthResponse;
 import com.olamide.receipthandler.dto.LoginRequest;
 import com.olamide.receipthandler.dto.RegisterRequest;
 import com.olamide.receipthandler.exceptions.ErrorResponse;
+import com.olamide.receipthandler.exceptions.InvalidCredentialsException;
 import com.olamide.receipthandler.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -12,6 +14,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -25,10 +28,13 @@ public class AuthController {
 
     private final AuthService authService;
     private final RefreshTokenCookieFactory cookieFactory;
+    private final LoginRateLimiter loginRateLimiter;
 
-    public AuthController(AuthService authService, RefreshTokenCookieFactory cookieFactory) {
+    public AuthController(AuthService authService, RefreshTokenCookieFactory cookieFactory,
+                          LoginRateLimiter loginRateLimiter) {
         this.authService = authService;
         this.cookieFactory = cookieFactory;
+        this.loginRateLimiter = loginRateLimiter;
     }
 
     @PostMapping("/register")
@@ -55,18 +61,31 @@ public class AuthController {
     @Operation(
             summary = "Log in",
             description = "Authenticates an existing user. Returns an access token in the body and sets a "
-                    + "refresh token as an HttpOnly cookie.",
+                    + "refresh token as an HttpOnly cookie. Rate-limited per client IP: 5 failed attempts "
+                    + "locks out further attempts from that IP for 15 minutes.",
             security = {})
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Authenticated; access token returned"),
             @ApiResponse(responseCode = "401", description = "Invalid email or password",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "429", description = "Too many failed attempts from this IP; try again later",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request,
+                                              HttpServletRequest httpRequest,
                                               HttpServletResponse response) {
-        AuthService.AuthResult result = authService.login(request);
-        response.addCookie(cookieFactory.create(result.refreshToken()));
-        return ResponseEntity.ok(result.authResponse());
+        String clientKey = httpRequest.getRemoteAddr();
+        loginRateLimiter.checkAllowed(clientKey);
+
+        try {
+            AuthService.AuthResult result = authService.login(request);
+            loginRateLimiter.recordSuccess(clientKey);
+            response.addCookie(cookieFactory.create(result.refreshToken()));
+            return ResponseEntity.ok(result.authResponse());
+        } catch (InvalidCredentialsException e) {
+            loginRateLimiter.recordFailure(clientKey);
+            throw e;
+        }
     }
 
     @PostMapping("/refresh")

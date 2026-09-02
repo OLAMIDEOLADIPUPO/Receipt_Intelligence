@@ -42,9 +42,6 @@ public class ReceiptExcelExportServiceImpl implements ReceiptExcelExportService 
 
     @Override
     public ExcelExportResult exportMonth(YearMonth month) {
-        // Company-wide export — Accounts' report covers every staff member's
-        // completed receipts, including ones uploaded via the public
-        // self-upload flow (which attach to the placeholder system user).
         LocalDate start = month.atDay(1);
         LocalDate end = month.atEndOfMonth();
 
@@ -107,15 +104,14 @@ public class ReceiptExcelExportServiceImpl implements ReceiptExcelExportService 
         Row row = sheet.createRow(rowIdx);
 
         row.createCell(0).setCellValue(
-                receipt.getStaff() != null ? receipt.getStaff().getName() : "Unassigned");
+                receipt.getStaff() != null ? sanitizeForExcel(receipt.getStaff().getName()) : "Unassigned");
         row.createCell(1).setCellValue(
                 receipt.getDate() != null ? receipt.getDate().format(DATE_FMT) : "");
-        row.createCell(2).setCellValue(
-                receipt.getMerchantName() != null ? receipt.getMerchantName() : "");
+        row.createCell(2).setCellValue(sanitizeForExcel(receipt.getMerchantName()));
 
         if (item != null) {
             row.createCell(3).setCellValue(item.getCategory() != null ? item.getCategory().name() : "");
-            row.createCell(4).setCellValue(item.getName() != null ? item.getName() : "");
+            row.createCell(4).setCellValue(sanitizeForExcel(item.getName()));
             if (item.getAmount() != null) {
                 row.createCell(5).setCellValue(item.getAmount().doubleValue());
             }
@@ -131,5 +127,16 @@ public class ReceiptExcelExportServiceImpl implements ReceiptExcelExportService 
         }
 
         return rowIdx + 1;
+    }
+
+    private static String sanitizeForExcel(String value) {
+        if (value == null || value.isEmpty()) {
+            return value == null ? "" : value;
+        }
+        char first = value.charAt(0);
+        if (first == '=' || first == '+' || first == '-' || first == '@') {
+            return "'" + value;
+        }
+        return value;
     }
 }
